@@ -30,10 +30,10 @@ import time
 # pip install Pillow
 try:
     import Image
-    from Image import LANCZOS
+    from Image import BICUBIC
 except ImportError:
     from PIL import Image
-    from PIL.Image import LANCZOS
+    from PIL.Image import BICUBIC
     
 import requests
 
@@ -101,7 +101,7 @@ class WebCam(object):
         webcam_request = requests.get(self.url)
         webcam_source_image = Image.open(StringIO(webcam_request.content))
         source_region = webcam_source_image.crop(self._source_box)
-        return source_region.resize((out_width_pixels, out_height_pixels), resample=LANCZOS)
+        return source_region.resize((out_width_pixels, out_height_pixels), resample=BICUBIC)
     
     def _gamma_correct_24bit_rgb(self, rgb_value):
         return (self._gamma_correct_8bit_value(rgb_value[0]),
