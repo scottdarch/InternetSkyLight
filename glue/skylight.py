@@ -27,18 +27,23 @@ import argparse
 import math
 import time
 
-# pip install Pillow
-try:
-    import Image
-    from Image import BICUBIC
-except ImportError:
-    from PIL import Image
-    from PIL.Image import BICUBIC
-    
+# pip install pyephem
+import ephem
+# pip install requests
 import requests
 
 import opc
 
+
+# pip install Pillow
+try:
+    import Image
+    from Image import BICUBIC
+    import ImageEnhance
+except ImportError:
+    from PIL import Image
+    from PIL.Image import BICUBIC
+    from PIL import ImageEnhance
 
 __app_name__ = "skylight"
 
@@ -75,42 +80,66 @@ class WebCam(object):
     '''
     Access to a webcam image and mechanisms to extract resampled pixel arrays.
     '''
-    def __init__(self, url, source_box, gamma):
+    def __init__(self, url, source_box, brightness, cityname):
         super(WebCam, self).__init__()
         self.url = url
         self._source_box = source_box
-        self._gamma = gamma
+        self._brightness = brightness
+        if cityname is None:
+            self._observer = None
+        try:
+            self._observer = ephem.city(cityname)
+        except KeyError as e:
+            # If you city is not found you can build an observer yourself.
+            # See http://rhodesmill.org/pyephem/quick.html for details
+            print str(e)
+            self._observer = None
         
-    def sample(self, out_width_pixels, out_height_pixels):
-        sampled = self._sample_webcam_image(out_width_pixels, out_height_pixels)
-        return self._sampled_pixels_to_flat_with_adjustments(out_width_pixels, out_height_pixels, sampled.load())
-        
+    def sample(self, display_width_pixels, display_height_pixels, show=False):
+        sampled_image = self._sample_webcam_image(display_width_pixels, display_height_pixels)
+        enchancer = ImageEnhance.Brightness(sampled_image)
+        if self._is_sun_down():
+            sampled_image = enchancer.enhance(0)
+            print "sun is down. Returning black."
+        elif self._brightness != 1:
+            sampled_image = enchancer.enhance(self._brightness)
+            
+        if show:
+            sampled_image.show()
+        return self._sampled_pixels_to_flat(display_width_pixels, display_height_pixels, sampled_image.load())
     
-    def show_sample(self, out_width_pixels, out_height_pixels):
-        sampled = self._sample_webcam_image(out_width_pixels, out_height_pixels)
-        sampled.show()
-    
-    def _sampled_pixels_to_flat_with_adjustments(self, out_width_pixels, out_height_pixels, sampled_pixel_access):
+    # +------------------------------------------------------------------------+
+    # | PRIVATE
+    # +------------------------------------------------------------------------+
+
+    def _sampled_pixels_to_flat(self, display_width_pixels, display_height_pixels, sampled_pixel_access):
         flat_pixels = []
-        for y in xrange(0, out_height_pixels):
-            for x in xrange(0, out_width_pixels):
-                flat_pixels.append(self._gamma_correct_24bit_rgb(sampled_pixel_access[x,y]))
+        for y in xrange(0, display_height_pixels):
+            for x in xrange(0, display_width_pixels):
+                flat_pixels.append(sampled_pixel_access[x,y])
         return flat_pixels
         
-    def _sample_webcam_image(self, out_width_pixels, out_height_pixels):
+    def _sample_webcam_image(self, display_width_pixels, display_height_pixels):
         webcam_request = requests.get(self.url)
         webcam_source_image = Image.open(StringIO(webcam_request.content))
         source_region = webcam_source_image.crop(self._source_box)
-        return source_region.resize((out_width_pixels, out_height_pixels), resample=BICUBIC)
-    
-    def _gamma_correct_24bit_rgb(self, rgb_value):
-        return (self._gamma_correct_8bit_value(rgb_value[0]),
-                self._gamma_correct_8bit_value(rgb_value[1]),
-                self._gamma_correct_8bit_value(rgb_value[2]))
-    
-    def _gamma_correct_8bit_value(self, value):
-        return int(((float(value) / 255.0) ** self._gamma) * 255.0)
+        return source_region.resize((display_width_pixels, display_height_pixels), resample=BICUBIC)
+
+    def _is_sun_down(self):
+        if self._observer is None:
+            return False
+        sun = ephem.Sun()
+        now = ephem.now()
+        next_rising = self._observer.next_rising(sun)
+        next_setting = self._observer.next_setting(sun)
+        if now < next_rising and next_setting > next_rising:
+            # now is before the sunrise and the next sunset is after
+            # the sunrise then the sun is down.
+            return True
+        else:
+            return False
         
+            
 # +---------------------------------------------------------------------------+
 # | MAIN
 # +---------------------------------------------------------------------------+
@@ -121,12 +150,16 @@ _opc_update_minutes = 1
 def main():
     parser = argparse.ArgumentParser(
             prog=__app_name__, description="Open Pixel Controller client to simulate a skylight.")
-    parser.add_argument('-p', '--port', default=7890, type=int)
-    parser.add_argument('-c', '--cam', help="URL to a webcam image", default="http://wwc.instacam.com/instacamimg/SALTY/SALTY_l.jpg")
-    parser.add_argument('-g', '--gamma', help="Gamma value to apply to the webcam image", default=1.0, type=float)
+    parser.add_argument('-c', '--cam', help="URL to a webcam image", required=True)
+    parser.add_argument('-p', '--port', help="TCP port to connect to OPC server on.", default=7890, type=int)
+    parser.add_argument('--brightness', help="Brightness value to apply to the webcam image", default=1.0, type=float)
+    parser.add_argument('-b', '--box', help="4 values; left-x, top-y, width-pixels, height-pixels specifying a sub-region of webcam image to sample.", nargs="+", type=int)
+    parser.add_argument('-s', '--show', help="Use python imaging (or Pillow) to show the pixel source locally.", action="store_true")
+    parser.add_argument('--city', help="If an observer city is found the skylight image is always black after sundown until sunrise.")
     
     args = parser.parse_args()
     
+    print str(args.box)
     opc_client = opc.Client("127.0.0.1:{}".format(args.port))
     
     while(not opc_client.can_connect()):
@@ -136,7 +169,7 @@ def main():
     print 'connected to {}'.format(opc_client._port)
     
     panel0 = SquarePixelMatrix(opc_client, 0, 64)
-    cam = WebCam(args.cam, (0, 0, 400, 400), args.gamma)
+    cam = WebCam(args.cam, args.box, args.brightness, args.city)
     
     pixels = None
     
@@ -147,7 +180,7 @@ def main():
             last_update += 1
             if last_update >= (_opc_update_minutes * (60 * _opc_fps)):
                 last_update = 0
-                pixels = cam.sample(panel0.stride, panel0.rows)
+                pixels = cam.sample(panel0.stride, panel0.rows, args.show)
                 print "Updating from {}".format(cam.url)
             panel0.set_pixels(pixels)
             time.sleep(1.0 / float(_opc_fps))
