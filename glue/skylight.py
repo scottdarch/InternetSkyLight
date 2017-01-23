@@ -85,15 +85,17 @@ class WebCam(object):
         self.url = url
         self._source_box = source_box
         self._brightness = brightness
-        if cityname is None:
-            self._observer = None
-        try:
-            self._observer = ephem.city(cityname)
-        except KeyError as e:
-            # If you city is not found you can build an observer yourself.
-            # See http://rhodesmill.org/pyephem/quick.html for details
-            print str(e)
-            self._observer = None
+        self._observer = None
+        if cityname is not None:
+            try:
+                self._observer = ephem.city(cityname)
+            except KeyError as e:
+                # If you city is not found you can build an observer yourself.
+                # See http://rhodesmill.org/pyephem/quick.html for details
+                print str(e)
+            except Exception as e:
+                print str(e)
+                print "pyephem is not working correctly."
         
     def sample(self, display_width_pixels, display_height_pixels, show=False):
         sampled_image = self._sample_webcam_image(display_width_pixels, display_height_pixels)
