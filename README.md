@@ -37,7 +37,7 @@ running Debian Jessie.
 ### Install Services
 
     cp ~/fadecandy/server/fcserver /usr/bin
-    vi /lib/systemd/systemd-fcserver
+    vi /lib/systemd/system/systemd-fcserver
 
 #### /lib/systemd/system/fcserver.service
 
@@ -84,3 +84,7 @@ then
 **Seattle Skyline**
 
     skylight.py -c http://wwc.instacam.com/instacamimg/SALTY/SALTY_l.jpg --box 0 0 1028 350 --city Seattle
+
+**Mount Arunachala, Tiruvannamalai, India**
+
+    skylight.py -c http://www.arunachala-live.com/live/video.jpg --box 0 0 800 200
