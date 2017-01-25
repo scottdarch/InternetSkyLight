@@ -17,4 +17,6 @@ RemoteSystemsTempFiles
 .env.local
 .cproject
 .project
+*.pyc
+.pydevproject
 

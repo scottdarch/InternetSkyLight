@@ -65,10 +65,12 @@ def main():
                             initial_backlight=lcd_backlight_on)
     
     while True:
+        ssid = os.popen("iwconfig wlan0 | awk -F '\"' '{print $2;exit}'").read()
         ipaddress = os.popen("ip route get 1 | awk '{print $NF;exit}'").read()
         lcd.clear()
-        lcd.message(ipaddress)
-        print ipaddress
+        message = "{}{}".format(ssid, ipaddress)
+        lcd.message(message)
+        print message
     
         time.sleep(iprefresh_time_seconds)
 
