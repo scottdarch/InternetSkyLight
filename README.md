@@ -37,7 +37,6 @@ running Debian Jessie.
 ### Install Services
 
     cp ~/fadecandy/server/fcserver /usr/bin
-    vi /lib/systemd/system/systemd-fcserver
 
 #### /lib/systemd/system/fcserver.service
 
@@ -54,8 +53,6 @@ running Debian Jessie.
 
  then
 
-    cd /etc/systemd/system
-    ln -s /lib/systemd/system/fcserver.service
     systemctl enable fcserver.service
 
 #### /lib/systemd/system/skylight-seattle.service
@@ -75,8 +72,6 @@ Run a skylight using a Seattle Washington USA webcamera
 
 then
 
-    cd /etc/systemd/system
-    ln -s /lib/systemd/system/skylight-seattle.service
     systemctl enable skylight-seattle.service
 
 ## Some Example Cams

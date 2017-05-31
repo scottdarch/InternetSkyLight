@@ -24,17 +24,17 @@
 
 from StringIO import StringIO
 import argparse
-import math
 import time
 
-# pip install pyephem
 import ephem
-# pip install requests
 import requests
 
+from neopixel import SquarePixelMatrix
 import opc
 
 
+# pip install pyephem
+# pip install requests
 # pip install Pillow
 try:
     import Image
@@ -46,34 +46,6 @@ except ImportError:
     from PIL import ImageEnhance
 
 __app_name__ = "skylight"
-
-# +---------------------------------------------------------------------------+
-class SquarePixelMatrix(object):
-    '''
-    Square matrix of pixels.
-    '''
-    def __init__(self, opc_client, channel, pixel_count):
-        super(SquarePixelMatrix, self).__init__()
-        self._opc_client = opc_client
-        self._channel = channel
-        self._pixels = None
-        self.pixel_count = pixel_count
-        self.stride = int(math.sqrt(pixel_count))
-        self.rows = self.stride
-    
-    def set_pixels(self, pixels):
-        if None is pixels:
-            self.black()
-        else:
-            self._pixels = pixels
-        self._send()
-        
-    def black(self):
-        self._pixels = [(0,0,0)] * self.pixel_count
-        self._send()
-    
-    def _send(self):
-        self._opc_client.put_pixels(self._pixels, channel=self._channel)
 
 # +---------------------------------------------------------------------------+
 class WebCam(object):
