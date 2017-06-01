@@ -25,7 +25,7 @@ import argparse
 import math
 import time
 
-from neopixel import SquarePixelMatrix
+from neopixel import RectangularPixelMatrix
 import numpy as np
 import opc
 
@@ -42,7 +42,6 @@ def sinusoidal_uint8(period, x):
 class Sky(object):
     
     def __init__(self, stride, pixel_count):
-        self._pixels = np.zeros((pixel_count, 3), dtype=np.uint8)
         self._pixel_count = pixel_count
         self._stride = stride
         self._x = 0
@@ -60,11 +59,11 @@ class Sky(object):
         return (wp, wp, wp)
     
     def __call__(self, panel):
-        
-        self._pixels = np.full((self._pixel_count, 3), 
+        panel.pixels = np.full((self._pixel_count, 3), 
                                self.weather_correct_sky_pixel(self.get_pixel_for_time_of_day()), 
                                dtype=np.uint8)
-        panel.set_pixels(self._pixels)
+        self._x += 1
+
     
 # +---------------------------------------------------------------------------+
 # | MAIN
@@ -74,12 +73,14 @@ _opc_fps = 120
 def main():
     parser = argparse.ArgumentParser(
             prog=__app_name__, description="Open Pixel Controller client to simulate a skylight.")
+    parser.add_argument('--address', default="127.0.0.1", help="IP address to connect to.")
     parser.add_argument('-p', '--port', help="TCP port to connect to OPC server on.", default=7890, type=int)
+    parser.add_argument('-b', '--brightness', help="Linear brightness value (0 - 1.0)", default=.5, type=float)
     
     args = parser.parse_args()
     
     
-    opc_client = opc.Client("127.0.0.1:{}".format(args.port))
+    opc_client = opc.Client("{}:{}".format(args.address, args.port))
     
     while(not opc_client.can_connect()):
         print 'Waiting for {}...'.format(opc_client._port)
@@ -87,8 +88,9 @@ def main():
      
     print 'connected to {}'.format(opc_client._port)
     
-    panel0 = SquarePixelMatrix(opc_client, 0, 64)
-    ani0 = Sky(panel0.pixel_count/2, panel0.pixel_count)
+    panel0 = RectangularPixelMatrix(opc_client, 0, 32, 256)
+    panel0.brightness = args.brightness
+    ani0 = Sky(panel0.stride, panel0.pixel_count)
     
     try:
 
