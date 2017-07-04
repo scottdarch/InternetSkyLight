@@ -55,5 +55,11 @@ class RectangularPixelMatrix(object):
                                dtype=np.uint8)
         self._send()
     
+    def red(self):
+        self._pixels = np.full((self.pixel_count, 3), 
+                               (255 * self.brightness,0,0), 
+                               dtype=np.uint8)
+        self._send()
+
     def _send(self):
         self._opc_client.put_pixels(self._pixels, channel=self._channel)
