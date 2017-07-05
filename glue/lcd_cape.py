@@ -15,7 +15,7 @@
 #   limitations under the License.
 
 import os
-import time
+import clocks
 
 import Adafruit_CharLCD as LCD
 import Adafruit_GPIO.MCP230xx as MCP
@@ -72,7 +72,7 @@ def main():
         lcd.message(message)
         print message
     
-        time.sleep(iprefresh_time_seconds)
+        clocks.sleep(iprefresh_time_seconds)
 
 if __name__ == "__main__":
     main()

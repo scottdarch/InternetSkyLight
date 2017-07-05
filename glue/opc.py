@@ -29,7 +29,7 @@ Recommended use:
             print '...'
         else:
             print 'not connected'
-        time.sleep(1/30.0)
+        clocks.sleep(1/30.0)
 
 """
 
@@ -135,7 +135,7 @@ class Client(object):
 
         The list of pixel colors will be applied to the LED string starting
         with the first LED.  It's not possible to send a color just to one
-        LED at a time (unless it's the first one).
+        LED at a clocks (unless it's the first one).
 
         """
         self._debug('put_pixels: connecting')
