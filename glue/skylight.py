@@ -21,8 +21,6 @@
 # |___|_| |_|\__\___|_|  |_| |_|\___|\__| |____/|_|\_\\__, |_|_|\__, |_| |_|\__|
 #                                                     |___/     |___/
 # TODO:
-# 2. OPC client reconnect and move OPC client into the matrix class
-# 3. Retrieve weather and report in debug bar.
 # 5. Create a weather conditions -> colour map and implement _weather_correct_sky_pixel
 #
 import argparse
@@ -79,6 +77,7 @@ class WeatherSky(object):
         self._verbose = args.verbose
         self._bterm = terminal
         self._weather_timer = None
+        self._current_weather = None
         self._update_period_millis =  (3600000 * 24) / weather_service.get_max_updates_per_day()
             
         try:
@@ -123,6 +122,7 @@ class WeatherSky(object):
         if self._weather.has_new_weather():
             self._observer.pressure = self._weather.get_pressure_mb(self._observer.pressure)
             self._observer.temp = self._weather.get_temperature_c(self._observer.temp)
+            self._current_weather = self._weather.get_current_weather()
             if self._verbose:
                 print "Updating weather" 
         
@@ -253,9 +253,13 @@ class WeatherSky(object):
                 self._bterm.clear_eol()
                 rhs =  "[{phase}] {progress:.0%}".format(phase=phase,
                                       progress=progress)
+                center = "weather: {}".format(self._current_weather)
                 lhs = "{city}: {now:50}".format(city=self._city, 
                                       now=ephem.localtime(ephem.date(now)).strftime(__standard_datetime_format_for_debug__))
-                print self._bterm.white_on_blue("{}{}{}".format(lhs, ' ' * (self._bterm.width - (len(rhs) + len(lhs))), rhs))
+                spacing = (self._bterm.width - (len(rhs) + len(lhs) + len(center)))
+                lspacing = int(round(spacing / 2, 0))
+                rspacing = spacing - lspacing
+                print self._bterm.white_on_blue("{}{}{}{}{}".format(lhs, ' ' * lspacing , center, ' ' * rspacing, rhs))
 
 # +---------------------------------------------------------------------------+
 # | MAIN
