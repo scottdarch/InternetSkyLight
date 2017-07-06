@@ -20,11 +20,14 @@
 # |___|_| |_|\__\___|_|  |_| |_|\___|\__| |____/|_|\_\\__, |_|_|\__, |_| |_|\__|
 #
 import json
+import threading
 
 import requests
 
 
 class WeatherUnderground(object):
+    
+    MAX_API_CALLS_PER_DAY = 400
     
     @classmethod
     def on_visit_argparse(cls, parser, subparsers):  # @UnusedVariable
@@ -93,16 +96,62 @@ class WeatherUnderground(object):
     Unknown
     '''
     
+    @staticmethod
+    def _request_routine(self):
+        r = requests.get("http://api.wunderground.com/api/{}/conditions/q/CA/{}.json".format(self._key, self._city))
+        conditions = r.json()
+        with self._request_lock:
+            self._conditions = conditions
+            self._new_data_flag = True
+
     def __init__(self, args):
         self._key = args.wukey
+        if self._key is None:
+            raise ValueError("wukey argument is required if not using fake conditions.")
+        self._city = args.city
+        self._conditions = None
+        self._verbose = args.verbose
+        self._request_thread = None
+        self._request_lock = threading.RLock()
+        self._new_data_flag = False
     
-    def get_current_conditions(self, city):
-        r = requests.get("http://api.wunderground.com/api/{}/conditions/q/CA/{}.json".format(self._key, city))
-        return r.json()
+    def get_max_updates_per_day(self):
+        return self.MAX_API_CALLS_PER_DAY
     
-    def get_current_weather(self, city):
-        return self.get_current_conditions(city)['current_observation']['weather']
+    def start_weather_update(self):
+        with self._request_lock:
+            if self._request_thread is None or self._request_lock.is_alive():
+                self._request_thread = threading.Thread(group=None, target=self._request_routine, args=[self])
+                self._request_thread.start()
+                return True
+            else:
+                return False
+
+    def has_new_weather(self):
+        has_new = False
+        with self._request_lock:
+            has_new = self._new_data_flag
+            self._new_data_flag = False
+            #if self._verbose:
+            #    self.print_complete_weather()
+        return has_new
+        
+    def get_current_conditions(self):
+        with self._request_lock:
+            return (self._conditions['current_observation'] if self._conditions is not None else None)
     
-    def print_complete_weather(self, city):
-        print json.dumps(self.get_current_conditions(city), indent=4, sort_keys=True)
+    def get_current_weather(self):
+        conditions = self.get_current_conditions()
+        return (conditions['weather'] if conditions is not None else None)
+    
+    def get_pressure_mb(self, default_value=1013.25):
+        conditions = self.get_current_conditions()
+        return (float(conditions['pressure_mb']) if conditions is not None else default_value)
+    
+    def get_temperature_c(self, default_value=0.0):
+        conditions = self.get_current_conditions()
+        return (float(conditions['temp_c']) if conditions is not None else default_value)
+    
+    def print_complete_weather(self):
+        print json.dumps(self.get_current_conditions(), indent=4, sort_keys=True)
         

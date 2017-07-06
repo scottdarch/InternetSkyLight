@@ -23,7 +23,6 @@
 # TODO:
 # 2. OPC client reconnect and move OPC client into the matrix class
 # 3. Retrieve weather and report in debug bar.
-# 4. pipe pressure and temperature into PyEphem for refraction calculations
 # 5. Create a weather conditions -> colour map and implement _weather_correct_sky_pixel
 #
 import argparse
@@ -65,6 +64,7 @@ class WeatherSky(object):
     Pixel controller that represents the sky according to the time of day and
     weather conditions reported by an external weather service.
     '''
+    
     def __init__(self, args, terminal, wallclock, weather_service):
         self._twilight = .5
         self._clock = wallclock
@@ -78,6 +78,8 @@ class WeatherSky(object):
         self._next_night = None
         self._verbose = args.verbose
         self._bterm = terminal
+        self._weather_timer = None
+        self._update_period_millis =  (3600000 * 24) / weather_service.get_max_updates_per_day()
             
         try:
             self._observer = ephem.city(self._city)
@@ -107,6 +109,22 @@ class WeatherSky(object):
         daylight  = self._get_daylight(now)
         setting   = self._get_sunset(now)
         nighttime = self._get_night(now)
+        
+        # We have to ensure we are always using wall-clock time for the
+        # weather update since this API is metered.
+        actually_now = time.time()
+        if self._weather_timer is None or actually_now - self._weather_timer > self._update_period_millis:
+            if self._verbose:
+                print "About to request new weather (The next request will be in {:.2f} minutes)".format(self._update_period_millis / 60000.00)
+            # once per period send a request for new weather conditions
+            self._weather.start_weather_update()
+            self._weather_timer = actually_now
+        
+        if self._weather.has_new_weather():
+            self._observer.pressure = self._weather.get_pressure_mb(self._observer.pressure)
+            self._observer.temp = self._weather.get_temperature_c(self._observer.temp)
+            if self._verbose:
+                print "Updating weather" 
         
         if now > daylight[0] and now < daylight[1]:
             phase = "day"
