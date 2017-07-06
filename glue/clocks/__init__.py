@@ -38,8 +38,8 @@ class HyperClock(object):
     @classmethod
     def on_visit_argparse(cls, parser, subparsers):  # @UnusedVariable
         subparser = subparsers.add_parser("hypertime", help="Clock that can tick at an accelerated rate.")
-        subparser.add_argument('--now-utc', type=str, default=str(ephem.now()), help='fake starting time')
-        subparser.add_argument('--multiplier', '-m', type=int, default=6000, metavar="(X speed)")
+        subparser.add_argument('--now-utc', type=str, default=str(ephem.now()), metavar="[%Y/%m/%d hh:mm:ss]", help='fake starting time')
+        subparser.add_argument('--multiplier', '-X', type=int, default=6000, metavar="(X speed)")
         subparser.set_defaults(func=cls.create_hyper_clock)
     
     def __init__(self, args):

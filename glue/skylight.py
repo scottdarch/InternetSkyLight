@@ -21,11 +21,10 @@
 # |___|_| |_|\__\___|_|  |_| |_|\___|\__| |____/|_|\_\\__, |_|_|\__, |_| |_|\__|
 #                                                     |___/     |___/
 # TODO:
-# 1. sinusoidal daylight and down/dusk fade points
 # 2. OPC client reconnect and move OPC client into the matrix class
 # 3. Retrieve weather and report in debug bar.
 # 4. pipe pressure and temperature into PyEphem for refraction calculations
-# 5. Create a weather conditions -> colour map and implement weather_correct_sky_pixel
+# 5. Create a weather conditions -> colour map and implement _weather_correct_sky_pixel
 #
 import argparse
 import math
@@ -53,8 +52,8 @@ def sinusoidal(miny, maxy, period, x):
 def sinusoidal_uint8(period, x):
     return 127.5 * math.sin(math.pi / (period / 2.0) * x - math.pi / 2.0) + 127.5
 
-def circular_rise(p):
-    return math.sin(math.acos(1-p))
+def circular_rise(p, squish=1.0):
+    return math.sin(math.acos(1-p)) * squish
 
 
 # +----------------------------------------------------------------------------+
@@ -67,9 +66,7 @@ class WeatherSky(object):
     weather conditions reported by an external weather service.
     '''
     def __init__(self, args, terminal, wallclock, weather_service):
-        self._bg = 0.89
-        self._rg = 1.0
-        self._gg = 0.85
+        self._twilight = .5
         self._clock = wallclock
         self._city = args.city
         self._weather = weather_service
@@ -94,31 +91,65 @@ class WeatherSky(object):
             print str(e)
             print "pyephem is not working correctly."
     
-    def weather_correct_sky_pixel(self):
+    # +------------------------------------------------------------------------+
+    # | PYTHON DATAMODEL
+    # +------------------------------------------------------------------------+
+    
+    def __call__(self, panel):
+        # morning twilight (-6 rising) = 0.0
+        # morning sunrise (0 rising) = 1.0
+        # evening sunset (0 setting) = 1.0
+        # evening twilight (-6 setting) = 2.0
+        # civil twilight
+        now = self._clock.now()
+        
+        rising    = self._get_sunrise(now)
+        daylight  = self._get_daylight(now)
+        setting   = self._get_sunset(now)
+        nighttime = self._get_night(now)
+        
+        if now > daylight[0] and now < daylight[1]:
+            phase = "day"
+            progress = 1.0 - (daylight[1] - now) / (daylight[1] - daylight[0])
+            self._render_daytime(panel, progress)
+        elif now <= setting[1] and now >= setting[0]:
+            phase = "evening twilight"
+            progress = 1.0 - (setting[1] - now) / (setting[1] - setting[0])
+            self._render_evening_twilight(panel, progress)
+        elif now >= rising[0] and now <= rising[1]:
+            phase = "morning twilight"
+            progress = 1.0 - (rising[1] - now) / (rising[1] - rising[0])
+            self._render_morning_twilight(panel, progress)
+        else:
+            phase = "night"
+            progress = 1.0 - (nighttime[1] - now) / (nighttime[1] - nighttime[0])
+            self._render_night(panel, progress)
+        
+        self._draw_header(now, phase, progress)
+
+    # +------------------------------------------------------------------------+
+    # | LIGHTS
+    # +------------------------------------------------------------------------+
+    def _weather_correct_sky_pixel(self):
         # TODO: change white value based on weather
-        return (self._rg * 255, self._gg * 255, self._bg * 255)
+        return (255,255,255)
 
     def _render_night(self, panel, progress):  # @UnusedVariable
+        # FUTURE: Render moon phase on a clear night
         panel.black()
     
     def _render_morning_twilight(self, panel, progress):
-        panel.fill(tuple(x * circular_rise(progress) for x in self.weather_correct_sky_pixel()))
+        panel.fill(tuple(x * circular_rise(progress, self._twilight) for x in self._weather_correct_sky_pixel()))
     
     def _render_evening_twilight(self, panel, progress):
-        panel.fill(tuple(x * circular_rise(1.0 - progress) for x in self.weather_correct_sky_pixel()))
+        panel.fill(tuple(x * circular_rise(1.0 - progress, self._twilight) for x in self._weather_correct_sky_pixel()))
     
-    def _render_daytime(self, panel, progress):  # @UnusedVariable
-        panel.fill(self.weather_correct_sky_pixel())
+    def _render_daytime(self, panel, progress):
+        panel.fill(tuple(x * sinusoidal(self._twilight, 1.0, 1.0, progress) for x in self._weather_correct_sky_pixel()))
     
-    def _draw_header(self, now, phase, progress):
-        if self._verbose:
-            with self._bterm.location(0, 0):
-                self._bterm.clear_eol()
-                rhs =  "[{phase}] {progress:.0%}".format(phase=phase,
-                                      progress=progress)
-                lhs = "{city}: {now:50}".format(city=self._city, 
-                                      now=ephem.localtime(ephem.date(now)).strftime(__standard_datetime_format_for_debug__))
-                print self._bterm.white_on_blue("{}{}{}".format(lhs, ' ' * (self._bterm.width - (len(rhs) + len(lhs))), rhs))
+    # +------------------------------------------------------------------------+
+    # | EPHEMERIS
+    # +------------------------------------------------------------------------+
     
     def _get_sunrise(self, now):
         if self._next_sunrise is None or now > self._next_sunrise[1]:
@@ -194,38 +225,20 @@ class WeatherSky(object):
                 
         return self._next_night
     
-    def __call__(self, panel):
-        # morning twilight (-6 rising) = 0.0
-        # morning sunrise (0 rising) = 1.0
-        # evening sunset (0 setting) = 1.0
-        # evening twilight (-6 setting) = 2.0
-        # civil twilight
-        now = self._clock.now()
-        
-        rising    = self._get_sunrise(now)
-        daylight  = self._get_daylight(now)
-        setting   = self._get_sunset(now)
-        nighttime = self._get_night(now)
-        
-        if now > daylight[0] and now < daylight[1]:
-            phase = "day"
-            progress = 1.0 - (daylight[1] - now) / (daylight[1] - daylight[0])
-            self._render_daytime(panel, progress)
-        elif now <= setting[1] and now >= setting[0]:
-            phase = "evening twilight"
-            progress = 1.0 - (setting[1] - now) / (setting[1] - setting[0])
-            self._render_evening_twilight(panel, progress)
-        elif now >= rising[0] and now <= rising[1]:
-            phase = "morning twilight"
-            progress = 1.0 - (rising[1] - now) / (rising[1] - rising[0])
-            self._render_morning_twilight(panel, progress)
-        else:
-            phase = "night"
-            progress = 1.0 - (nighttime[1] - now) / (nighttime[1] - nighttime[0])
-            self._render_night(panel, progress)
-        
-        self._draw_header(now, phase, progress)
-            
+    # +------------------------------------------------------------------------+
+    # | DEBUG/UTILITY
+    # +------------------------------------------------------------------------+
+    
+    def _draw_header(self, now, phase, progress):
+        if self._verbose:
+            with self._bterm.location(0, 0):
+                self._bterm.clear_eol()
+                rhs =  "[{phase}] {progress:.0%}".format(phase=phase,
+                                      progress=progress)
+                lhs = "{city}: {now:50}".format(city=self._city, 
+                                      now=ephem.localtime(ephem.date(now)).strftime(__standard_datetime_format_for_debug__))
+                print self._bterm.white_on_blue("{}{}{}".format(lhs, ' ' * (self._bterm.width - (len(rhs) + len(lhs))), rhs))
+
 # +---------------------------------------------------------------------------+
 # | MAIN
 # +---------------------------------------------------------------------------+
