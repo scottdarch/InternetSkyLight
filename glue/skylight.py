@@ -21,7 +21,11 @@
 # |___|_| |_|\__\___|_|  |_| |_|\___|\__| |____/|_|\_\\__, |_|_|\__, |_| |_|\__|
 #                                                     |___/     |___/
 # TODO:
-# 5. Create a weather conditions -> colour map and implement _weather_correct_sky_pixel
+# 1. Create a weather conditions -> colour map and implement _weather_correct_sky_pixel
+# 2. setup.py
+# 3. fake weather
+# 4. Klaxon mode
+# 5. curve tuning (maybe use scipy fitpack to generate splines?)
 #
 import argparse
 import math
@@ -45,9 +49,6 @@ __standard_datetime_format_for_debug__ = "%Y/%m/%d %I:%M:%S %p"
 
 def sinusoidal(miny, maxy, period, x):
     return (maxy - miny) / 2 * math.sin(math.pi / (period / 2) * x - math.pi / 2) + (maxy + miny) / 2
-
-def sinusoidal_uint8(period, x):
-    return 127.5 * math.sin(math.pi / (period / 2.0) * x - math.pi / 2.0) + 127.5
 
 def circular_rise(p, squish=1.0):
     return math.sin(math.acos(1-p)) * squish
@@ -78,7 +79,8 @@ class WeatherSky(object):
         self._bterm = terminal
         self._weather_timer = None
         self._current_weather = None
-        self._update_period_millis =  (3600000 * 24) / weather_service.get_max_updates_per_day()
+        self._update_period_millis =  (3600000 * 24) / weather_service.get_max_updates_per_day() \
+            if weather_service is not None else 0
             
         try:
             self._observer = ephem.city(self._city)
@@ -109,22 +111,23 @@ class WeatherSky(object):
         setting   = self._get_sunset(now)
         nighttime = self._get_night(now)
         
-        # We have to ensure we are always using wall-clock time for the
-        # weather update since this API is metered.
-        actually_now = time.time()
-        if self._weather_timer is None or actually_now - self._weather_timer > self._update_period_millis:
-            if self._verbose:
-                print "About to request new weather (The next request will be in {:.2f} minutes)".format(self._update_period_millis / 60000.00)
-            # once per period send a request for new weather conditions
-            self._weather.start_weather_update()
-            self._weather_timer = actually_now
-        
-        if self._weather.has_new_weather():
-            self._observer.pressure = self._weather.get_pressure_mb(self._observer.pressure)
-            self._observer.temp = self._weather.get_temperature_c(self._observer.temp)
-            self._current_weather = self._weather.get_current_weather()
-            if self._verbose:
-                print "Updating weather" 
+        if self._weather is not None:
+            # We have to ensure we are always using wall-clock time for the
+            # weather update since this API is metered.
+            actually_now = time.time()
+            if self._weather_timer is None or actually_now - self._weather_timer > self._update_period_millis:
+                if self._verbose:
+                    print "About to request new weather (The next request will be in {:.2f} minutes)".format(self._update_period_millis / 60000.00)
+                # once per period send a request for new weather conditions
+                self._weather.start_weather_update()
+                self._weather_timer = actually_now
+            
+            if self._weather.has_new_weather():
+                self._observer.pressure = self._weather.get_pressure_mb(self._observer.pressure)
+                self._observer.temp = self._weather.get_temperature_c(self._observer.temp)
+                self._current_weather = self._weather.get_current_weather()
+                if self._verbose:
+                    print "Updating weather" 
         
         if now > daylight[0] and now < daylight[1]:
             phase = "day"
@@ -300,27 +303,35 @@ def main():
         dots = dots + '.' if len(dots) < 8 else '.'
         time.sleep(1)
     
-    print 'connected to OPC server on {}'.format(opc_client._port)
-    
-    panel0 = RectangularPixelMatrix(args, opc_client)
-    
-    clock = args.func(args)
-    
-    sky = WeatherSky(args, 
-                     terminal,
-                     clock, 
-                     WeatherUnderground(args))
-    
     try:
-        while(1):
-            start = time.time()
-            sky(panel0)
-            delay_for = (1.0 / float(_opc_fps)) - (time.time() - start)
-            time.sleep(delay_for if delay_for > 0 else 1)
-    except KeyboardInterrupt:
-        panel0.black()
-    
-    opc_client.disconnect()
+        print 'connected to OPC server on {}'.format(opc_client._port)
+        
+        panel0 = RectangularPixelMatrix(args, opc_client)
+        
+        clock = args.func(args)
+        
+        try:
+            weather = WeatherUnderground(args)
+        except ValueError:
+            print "Unable to obtain weather information. Check commandline arguments."
+            weather = None
+            
+        sky = WeatherSky(args, 
+                         terminal,
+                         clock, 
+                         weather)
+        
+        try:
+            while(1):
+                start = time.time()
+                sky(panel0)
+                delay_for = (1.0 / float(_opc_fps)) - (time.time() - start)
+                time.sleep(delay_for if delay_for > 0 else 1)
+        except KeyboardInterrupt:
+            panel0.black()
+            
+    finally:
+        opc_client.disconnect()
 
 if __name__ == "__main__":
     main()
