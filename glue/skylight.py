@@ -320,7 +320,6 @@ def main():
                          terminal,
                          clock, 
                          weather)
-        
         try:
             while(1):
                 start = time.time()
