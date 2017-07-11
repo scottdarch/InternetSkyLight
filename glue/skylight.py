@@ -31,13 +31,15 @@ import argparse
 import math
 import time
 
+from blessings import Terminal
 import ephem
 
-from blessings import Terminal
 from clocks import HyperClock, WallClock
+from curve_plot import plot_curve, make_curve
 from lights import RectangularPixelMatrix
 import opc
 from weather import WeatherUnderground
+from __builtin__ import None
 
 
 __app_name__ = "skylight"
@@ -76,9 +78,11 @@ class WeatherSky(object):
         self._next_day = None
         self._next_night = None
         self._verbose = args.verbose
+        self._show_daylight_chart = args.show_daylight_chart
         self._bterm = terminal
         self._weather_timer = None
         self._current_weather = None
+        self._xy = None
         self._update_period_millis =  (3600000 * 24) / weather_service.get_max_updates_per_day() \
             if weather_service is not None else 0
             
@@ -126,6 +130,11 @@ class WeatherSky(object):
                 self._observer.pressure = self._weather.get_pressure_mb(self._observer.pressure)
                 self._observer.temp = self._weather.get_temperature_c(self._observer.temp)
                 self._current_weather = self._weather.get_current_weather()
+                self._next_sunrise = None
+                self._next_day = None
+                self._next_sunset = None
+                self._next_night = None
+                self._xy = None
                 if self._verbose:
                     print "Updating weather" 
         
@@ -146,7 +155,7 @@ class WeatherSky(object):
             progress = 1.0 - (nighttime[1] - now) / (nighttime[1] - nighttime[0])
             self._render_night(panel, progress)
         
-        self._draw_header(now, phase, progress)
+        self._draw_debug(now, phase, progress)
 
     # +------------------------------------------------------------------------+
     # | LIGHTS
@@ -171,7 +180,19 @@ class WeatherSky(object):
     # +------------------------------------------------------------------------+
     # | EPHEMERIS
     # +------------------------------------------------------------------------+
-    
+    def _get_xy(self):
+        if self._xy is None:
+            morning_twilight = ephem.localtime(ephem.date(self._next_sunrise[0]))
+            dawn = ephem.localtime(ephem.date(self._next_sunrise[1]))
+            dusk = ephem.localtime(ephem.date(self._next_sunset[0]))
+            dark = ephem.localtime(ephem.date(self._next_sunset[1]))
+            self._xy = make_curve(
+                morning_twilight.hour + (morning_twilight.minute / 60.0),
+                dawn.hour             + (dawn.minute / 60.0),
+                dusk.hour             + (dusk.minute / 60.0),
+                dark.hour             + (dark.minute / 60.0))
+        return self._xy
+        
     def _get_sunrise(self, now):
         if self._next_sunrise is None or now > self._next_sunrise[1]:
             self._observer.horizon = '0'
@@ -230,6 +251,7 @@ class WeatherSky(object):
     
     def _get_night(self, now):
         if self._next_night is None or now > self._next_night[1]:
+            self._xy = None
             self._observer.horizon = '-6'
             setting = self._observer.next_setting(self._sun, start=now)
             rising = self._observer.next_rising(self._sun, start=now)
@@ -250,7 +272,7 @@ class WeatherSky(object):
     # | DEBUG/UTILITY
     # +------------------------------------------------------------------------+
     
-    def _draw_header(self, now, phase, progress):
+    def _draw_debug(self, now, phase, progress):
         if self._verbose:
             with self._bterm.location(0, 0):
                 self._bterm.clear_eol()
@@ -263,6 +285,9 @@ class WeatherSky(object):
                 lspacing = int(round(spacing / 2, 0))
                 rspacing = spacing - lspacing
                 print self._bterm.white_on_blue("{}{}{}{}{}".format(lhs, ' ' * lspacing , center, ' ' * rspacing, rhs))
+        if self._show_daylight_chart:
+            plot_curve(self._get_xy())
+            self._show_daylight_chart = False
 
 # +---------------------------------------------------------------------------+
 # | MAIN
@@ -285,6 +310,7 @@ def main():
     
     debug_args = parser.add_argument_group('debug options')
     debug_args.add_argument('--verbose','-v', action='store_true', help="Spew debug stuff.")
+    debug_args.add_argument('--show-daylight-chart', '-D', action='store_true', help="Open a window showing a plot of the daylight curve in-use.")
     
     RectangularPixelMatrix.on_visit_argparse(parser, subparsers)
     HyperClock.on_visit_argparse(parser, subparsers)
