@@ -1,5 +1,26 @@
 #!/usr/bin/env python
 
+#
+# Copyright 2017 Scott A Dixon
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+   
+#  ___       _                       _     ____  _          _ _       _     _   
+# |_ _|_ __ | |_ ___ _ __ _ __   ___| |_  / ___|| | ___   _| (_) __ _| |__ | |_ 
+#  | || '_ \| __/ _ \ '__| '_ \ / _ \ __| \___ \| |/ / | | | | |/ _` | '_ \| __|
+#  | || | | | ||  __/ |  | | | |  __/ |_   ___) |   <| |_| | | | (_| | | | | |_ 
+# |___|_| |_|\__\___|_|  |_| |_|\___|\__| |____/|_|\_\\__, |_|_|\__, |_| |_|\__|
+#                                                     |___/     |___/
 from matplotlib import ticker
 from scipy.misc import comb  # @UnresolvedImport
 
@@ -40,13 +61,14 @@ class MerkinFormatter(ticker.Formatter):
         else:
             return "{:.0f}".format(mhr)
 
-def make_curve(morning_twilight, dawn, dusk, dark, noon=12.5):
+def make_curve(morning_twilight, dawn, dusk, dark):
+    noon = dawn + ((dusk - dawn) / 2.0)
     control_points = [
-        [ morning_twilight, 0.00], 
-        [ dawn            , 0.95], 
-        [ noon            , 1.35], 
-        [ dusk            , 0.95], 
-        [ dark            , 0.00]
+        [ morning_twilight, 0.01], 
+        [ dawn            , 1.80], 
+        [ noon            , 0.30], 
+        [ dusk            , 1.80], 
+        [ dark            , 0.01]
         ]
                        
     return bezier_curve(control_points,
@@ -68,18 +90,23 @@ def plot_curve(xy, dawn=None, dusk=None):
         ni = int(len(t) / 2)
         plt.annotate(
         'FREE SANDWICHES',
-        xy=(t[ni], s[ni]), arrowprops=dict(arrowstyle='->'), xytext=(t[ni] - 5, s[ni] - .25))
+        xy=(t[ni], s[ni]), arrowprops=dict(arrowstyle='->'), xytext=(t[ni], s[ni] - .5))
         
-        plt.xlabel('time (hour)')
+        plt.xlabel('time (day)')
         plt.ylabel('intensity')
-        plt.gcf().axes[0].xaxis.set_major_formatter(MerkinFormatter())
-        plt.xlim(0, 24)
         plt.title('daylight')
         plt.grid(False)
         plt.show()
 
 def main():
-    plot_curve(make_curve(6.5, 7, 19, 20.5), 7, 19)
+    twi  = 0.000
+    dawn = 0.025
+    dusk = 0.750
+    dark = 0.775
+    xy = make_curve(twi, dawn, dusk, dark)
+    print "{} - {}".format(xy[0][0], xy[0][-1])
+    plot_curve(xy, dawn, dusk)
     
 if __name__ == "__main__":
     main()
+    

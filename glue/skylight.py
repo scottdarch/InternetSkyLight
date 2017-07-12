@@ -25,10 +25,8 @@
 # 2. setup.py
 # 3. fake weather
 # 4. Klaxon mode
-# 5. curve tuning (maybe use scipy fitpack to generate splines?)
 #
 import argparse
-import math
 import time
 
 from blessings import Terminal
@@ -39,26 +37,67 @@ from curve_plot import plot_curve, make_curve
 from lights import RectangularPixelMatrix
 import opc
 from weather import WeatherUnderground
-from __builtin__ import None
 
 
 __app_name__ = "skylight"
 __standard_datetime_format_for_debug__ = "%Y/%m/%d %I:%M:%S %p"
 
 # +----------------------------------------------------------------------------+
-# | CURVE FUNCTIONS
-# +----------------------------------------------------------------------------+
-
-def sinusoidal(miny, maxy, period, x):
-    return (maxy - miny) / 2 * math.sin(math.pi / (period / 2) * x - math.pi / 2) + (maxy + miny) / 2
-
-def circular_rise(p, squish=1.0):
-    return math.sin(math.acos(1-p)) * squish
-
-
-# +----------------------------------------------------------------------------+
 # | SKYS
 # +----------------------------------------------------------------------------+
+class Daylight(object):
+    
+    def __init__(self, twilight, dawn, dusk, dark, xy):
+        self._twilight = twilight
+        self._dawn = dawn
+        self._dusk = dusk
+        self._dark = dark
+        self._xy = xy
+    
+    @property
+    def twilight(self):
+        return self._twilight
+    
+    @property
+    def dawn(self):
+        return self._dawn
+    
+    @property
+    def dusk(self):
+        return self._dusk
+    
+    @property
+    def dark(self):
+        return self._dark
+    
+    @property
+    def intensities(self):
+        return self._xy[1]
+    
+    @property
+    def day_curve(self):
+        return self._xy
+    
+    def progress(self, now):
+        if self.is_daylight(now):
+            return (now - self._twilight) / (self._dark - self._twilight)
+        else:
+            return (self._twilight - now) / (1 - (self._dark - self._twilight))
+        
+    def is_daylight(self, now):
+        return now >= self._twilight and now <= self._dark
+    
+    def get_phase_for(self, now):
+        if now < self._twilight:
+            return "night"
+        elif now < self._dawn:
+            return "morning twilight"
+        elif now < self._dusk:
+            return "daytime"
+        elif now < self._dark:
+            return "evening twilight"
+        else:
+            return "night"
 
 class WeatherSky(object):
     '''
@@ -67,22 +106,20 @@ class WeatherSky(object):
     '''
     
     def __init__(self, args, terminal, wallclock, weather_service):
-        self._twilight = .5
+        self._twilight = "-7"
         self._clock = wallclock
         self._city = args.city
         self._weather = weather_service
         self._observer = None
         self._sun = ephem.Sun()  # @UndefinedVariable
-        self._next_sunrise = None
-        self._next_sunset = None
-        self._next_day = None
-        self._next_night = None
         self._verbose = args.verbose
         self._show_daylight_chart = args.show_daylight_chart
         self._bterm = terminal
         self._weather_timer = None
         self._current_weather = None
-        self._xy = None
+        self._current_daylight = None
+        self._pixel_color = (255,255,255)
+        
         self._update_period_millis =  (3600000 * 24) / weather_service.get_max_updates_per_day() \
             if weather_service is not None else 0
             
@@ -103,17 +140,7 @@ class WeatherSky(object):
     # +------------------------------------------------------------------------+
     
     def __call__(self, panel):
-        # morning twilight (-6 rising) = 0.0
-        # morning sunrise (0 rising) = 1.0
-        # evening sunset (0 setting) = 1.0
-        # evening twilight (-6 setting) = 2.0
-        # civil twilight
         now = self._clock.now()
-        
-        rising    = self._get_sunrise(now)
-        daylight  = self._get_daylight(now)
-        setting   = self._get_sunset(now)
-        nighttime = self._get_night(now)
         
         if self._weather is not None:
             # We have to ensure we are always using wall-clock time for the
@@ -130,143 +157,66 @@ class WeatherSky(object):
                 self._observer.pressure = self._weather.get_pressure_mb(self._observer.pressure)
                 self._observer.temp = self._weather.get_temperature_c(self._observer.temp)
                 self._current_weather = self._weather.get_current_weather()
-                self._next_sunrise = None
-                self._next_day = None
-                self._next_sunset = None
-                self._next_night = None
-                self._xy = None
+                if self._weather.is_sunny:
+                    self._pixel_color = (255,255,255)
+                elif self._weather.is_emergency:
+                    self._pixel_color = (255,0,0)
+                elif self._weather.is_snowing:
+                    self._pixel_color = (0,255,0)
+                else:
+                    self._pixel_color = (0,0,255)
+                
+                self._current_daylight = None
                 if self._verbose:
                     print "Updating weather" 
         
-        if now > daylight[0] and now < daylight[1]:
-            phase = "day"
-            progress = 1.0 - (daylight[1] - now) / (daylight[1] - daylight[0])
-            self._render_daytime(panel, progress)
-        elif now <= setting[1] and now >= setting[0]:
-            phase = "evening twilight"
-            progress = 1.0 - (setting[1] - now) / (setting[1] - setting[0])
-            self._render_evening_twilight(panel, progress)
-        elif now >= rising[0] and now <= rising[1]:
-            phase = "morning twilight"
-            progress = 1.0 - (rising[1] - now) / (rising[1] - rising[0])
-            self._render_morning_twilight(panel, progress)
-        else:
-            phase = "night"
-            progress = 1.0 - (nighttime[1] - now) / (nighttime[1] - nighttime[0])
-            self._render_night(panel, progress)
+        self._update_ephemeris(now)
         
-        self._draw_debug(now, phase, progress)
+        intensities = self._current_daylight.intensities
+
+        progress = self._current_daylight.progress(now)
+        
+        if self._current_daylight.is_daylight(now):
+        
+            intensity_index = int(len(intensities) * progress)
+            self._render_daylight(panel, intensities[intensity_index if intensity_index < len(intensities) else len(intensities) - 1])
+        else:
+            self._render_night(panel, progress)
+            
+        self._draw_debug(now, self._current_daylight.get_phase_for(now), progress)
 
     # +------------------------------------------------------------------------+
     # | LIGHTS
     # +------------------------------------------------------------------------+
     def _weather_correct_sky_pixel(self):
-        # TODO: change white value based on weather
-        return (255,255,255)
+        return self._pixel_color
 
     def _render_night(self, panel, progress):  # @UnusedVariable
         # FUTURE: Render moon phase on a clear night
         panel.black()
     
-    def _render_morning_twilight(self, panel, progress):
-        panel.fill(tuple(x * circular_rise(progress, self._twilight) for x in self._weather_correct_sky_pixel()))
-    
-    def _render_evening_twilight(self, panel, progress):
-        panel.fill(tuple(x * circular_rise(1.0 - progress, self._twilight) for x in self._weather_correct_sky_pixel()))
-    
-    def _render_daytime(self, panel, progress):
-        panel.fill(tuple(x * sinusoidal(self._twilight, 1.0, 1.0, progress) for x in self._weather_correct_sky_pixel()))
+    def _render_daylight(self, panel, intensity):
+        panel.fill(tuple(x * (intensity if intensity <= 1.0 else 1.0) for x in self._weather_correct_sky_pixel()))
     
     # +------------------------------------------------------------------------+
     # | EPHEMERIS
     # +------------------------------------------------------------------------+
-    def _get_xy(self):
-        if self._xy is None:
-            morning_twilight = ephem.localtime(ephem.date(self._next_sunrise[0]))
-            dawn = ephem.localtime(ephem.date(self._next_sunrise[1]))
-            dusk = ephem.localtime(ephem.date(self._next_sunset[0]))
-            dark = ephem.localtime(ephem.date(self._next_sunset[1]))
-            self._xy = make_curve(
-                morning_twilight.hour + (morning_twilight.minute / 60.0),
-                dawn.hour             + (dawn.minute / 60.0),
-                dusk.hour             + (dusk.minute / 60.0),
-                dark.hour             + (dark.minute / 60.0))
-        return self._xy
+    def _update_ephemeris(self, now):
         
-    def _get_sunrise(self, now):
-        if self._next_sunrise is None or now > self._next_sunrise[1]:
+        self._observer.horizon = self._twilight
+        next_dark = self._observer.next_setting(self._sun, start=now)
+        
+        if self._current_daylight is None or int(next_dark) != int(self._current_daylight.dark):
+            
+            twilight = self._observer.previous_rising(self._sun, start=next_dark)
+            
             self._observer.horizon = '0'
-            rise = self._observer.next_rising(self._sun, start=now)
-            self._observer.horizon = '-6'
-            twilight = self._observer.next_rising(self._sun, start=now)
-            if now < rise and twilight > rise:
-                # we are in the morning twilight
-                twilight = self._observer.previous_rising(self._sun, start=now)
-
-            self._next_sunrise = (twilight, rise)
+            dawn = self._observer.next_rising(self._sun, start=twilight)
+            dusk = self._observer.next_setting(self._sun, start=twilight)
+            xy = make_curve(float(twilight), float(dawn), float(dusk), float(next_dark))
             if self._verbose:
-                print "The sun will rise between {} and {}".format(
-                    ephem.localtime(ephem.date(self._next_sunrise[0])).strftime(__standard_datetime_format_for_debug__),
-                    ephem.localtime(ephem.date(self._next_sunrise[1])).strftime(__standard_datetime_format_for_debug__))
-
-        return self._next_sunrise
-
-    def _get_sunset(self, now):
-        if self._next_sunset is None or now > self._next_sunset[1]:
-            self._observer.horizon = '-6'
-            # TODO: add current temperature and pressure to calculate retraction
-            darkness = self._observer.next_setting(self._sun, start=now)
-            self._observer.horizon = '0'
-            setting = self._observer.next_setting(self._sun, start=now)
-            if now < darkness and setting > darkness:
-                # we are in the evening twilight
-                setting = self._observer.previous_setting(self._sun, start=now)
-            
-            self._next_sunset = (setting, darkness)
-            
-            if self._verbose:
-                print "The sun will set between {} and {}".format(
-                    ephem.localtime(ephem.date(self._next_sunset[0])).strftime(__standard_datetime_format_for_debug__),
-                    ephem.localtime(ephem.date(self._next_sunset[1])).strftime(__standard_datetime_format_for_debug__))
-                
-        return self._next_sunset
-    
-    def _get_daylight(self, now):
-        if self._next_day is None or now > self._next_day[1]:
-            self._observer.horizon = '0'
-            rising = self._observer.next_rising(self._sun, start=now)
-            setting = self._observer.next_setting(self._sun, start=now)
-            if now < setting and rising > setting:
-                # we are in the day
-                rising = self._observer.previous_rising(self._sun, start=now)
-            
-            self._next_day = (rising, setting)
-            
-            if self._verbose:
-                print "The sun will be up between {} and {}".format(
-                    ephem.localtime(ephem.date(self._next_day[0])).strftime(__standard_datetime_format_for_debug__),
-                    ephem.localtime(ephem.date(self._next_day[1])).strftime(__standard_datetime_format_for_debug__))
-                
-        return self._next_day
-    
-    def _get_night(self, now):
-        if self._next_night is None or now > self._next_night[1]:
-            self._xy = None
-            self._observer.horizon = '-6'
-            setting = self._observer.next_setting(self._sun, start=now)
-            rising = self._observer.next_rising(self._sun, start=now)
-            if now < rising and setting > rising:
-                # we are in the night
-                setting = self._observer.previous_setting(self._sun, start=now)
-            
-            self._next_night = (setting, rising)
-            
-            if self._verbose:
-                print "The sun will be down between {} and {}".format(
-                    ephem.localtime(ephem.date(self._next_night[0])).strftime(__standard_datetime_format_for_debug__),
-                    ephem.localtime(ephem.date(self._next_night[1])).strftime(__standard_datetime_format_for_debug__))
-                
-        return self._next_night
+                print "It's a new day ({} - {})".format(twilight, next_dark)
+            self._current_daylight = Daylight(twilight, dawn, dusk, next_dark, xy)            
     
     # +------------------------------------------------------------------------+
     # | DEBUG/UTILITY
@@ -286,13 +236,13 @@ class WeatherSky(object):
                 rspacing = spacing - lspacing
                 print self._bterm.white_on_blue("{}{}{}{}{}".format(lhs, ' ' * lspacing , center, ' ' * rspacing, rhs))
         if self._show_daylight_chart:
-            plot_curve(self._get_xy())
+            plot_curve(self._current_daylight.day_curve, self._current_daylight.dawn, self._current_daylight.dusk)
             self._show_daylight_chart = False
 
 # +---------------------------------------------------------------------------+
 # | MAIN
 # +---------------------------------------------------------------------------+
-_opc_fps = 240
+_opc_fps = 60
 
 def main():
     parser = argparse.ArgumentParser(
