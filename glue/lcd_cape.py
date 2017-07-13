@@ -14,11 +14,16 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+import argparse
 import os
-import clocks
+import re
 
 import Adafruit_CharLCD as LCD
 import Adafruit_GPIO.MCP230xx as MCP
+import time
+
+
+__app_name__ = "lcd_cape"
 
 # +----------------------------------------------------------------------------+
 # | CONSTANTS
@@ -45,8 +50,27 @@ iprefresh_time_seconds = 5
 # +----------------------------------------------------------------------------+
 # | MAIN
 # +----------------------------------------------------------------------------+
+def line0_ethernet(interface):
+    return interface
+    
+def line1_ethernet(interface):
+    return os.popen("ip addr show " + interface + " | awk '$1 == \"inet\" {gsub(/\/.*$/, \"\", $2); print $2}'").read()
 
+def line0_wlan(interface):
+    return os.popen("iwconfig " + interface + " | awk -F '\"' '{print $2;exit}'").read()
+
+def line1_wlan(interface):  # @UnusedVariable
+    return os.popen("ip route get 1 | awk '{print $NF;exit}'").read()
+    
 def main():
+    parser = argparse.ArgumentParser(
+            prog=__app_name__, 
+            description="Runs a 16 character display attached to the BeagleBone to display the current IP address.")
+    
+    parser.add_argument("--interface", default="eth0", help="The interface to report the address for.")
+    
+    args = parser.parse_args()
+     
     # Initialize MCP23017 device using its default 0x20 I2C address.
     gpio = MCP.MCP23008(busnum=2)
     
@@ -64,15 +88,22 @@ def main():
                             gpio=gpio, 
                             initial_backlight=lcd_backlight_on)
     
+    interface = args.interface
+    
+    if re.match("^eth", interface) is not None:
+        line0 = line0_ethernet
+        line1 = line1_ethernet
+    else:
+        line0 = line0_wlan
+        line1 = line1_wlan
+        
     while True:
-        ssid = os.popen("iwconfig wlan0 | awk -F '\"' '{print $2;exit}'").read()
-        ipaddress = os.popen("ip route get 1 | awk '{print $NF;exit}'").read()
         lcd.clear()
-        message = "{}{}".format(ssid, ipaddress)
+        message = "{}\n{}".format(line0(interface), line1(interface))
         lcd.message(message)
         print message
     
-        clocks.sleep(iprefresh_time_seconds)
+        time.sleep(iprefresh_time_seconds)
 
 if __name__ == "__main__":
     main()

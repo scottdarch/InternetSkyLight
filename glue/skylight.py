@@ -160,8 +160,10 @@ class WeatherSky(object):
                 if self._weather.is_sunny:
                     self._pixel_color = (255,255,255)
                 elif self._weather.is_emergency:
+                    # TODO: strobe or other animation for "alert, bad weather!"
                     self._pixel_color = (255,0,0)
                 elif self._weather.is_snowing:
+                    # TODO: something more festive for snow.
                     self._pixel_color = (0,255,0)
                 else:
                     self._pixel_color = (0,0,255)

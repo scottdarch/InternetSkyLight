@@ -1,44 +1,93 @@
 # InternetSkyLight
+
 A skylight you can install in your internets.
 
-TODO
-* use pyephem to simulate moonlight
-* add some sample webcam URLs from around the world.
-* support more pixel topologies
+This package provides software to control a fadecandy or other [open pixel controller](http://openpixelcontrol.org/) server to simulate daylight intensity
+over time and indicate weather conditions using light colour.
+
+```
+usage: skylight [-h] --city CITY [--address ADDRESS] [-p PORT] [--verbose]
+                [--show-daylight-chart] [--brightness [0.0 - 1.0]]
+                [--channel CHANNEL] [--stride STRIDE]
+                [--pixel-count PIXEL_COUNT] [--wukey WUKEY]
+                [--weather WEATHER]
+                {hypertime,realtime} ...
+
+Open Pixel Controller client providing contextual lighting effects.
+
+positional arguments:
+  {hypertime,realtime}  Clock Modes
+    hypertime           Clock that can tick at an accelerated rate.
+    realtime            Uses system time.
+
+optional arguments:
+  -h, --help            show this help message and exit
+
+Ephemeris options:
+  --city CITY           A city used to lookup ephemeris values and to retrieve
+                        current weather conditions.
+
+OPC options:
+  --address ADDRESS     IP address to connect to.
+  -p PORT, --port PORT  TCP port to connect to OPC server on.
+
+debug options:
+  --verbose, -v         Spew debug stuff.
+  --show-daylight-chart, -D
+                        Open a window showing a plot of the daylight curve in-
+                        use.
+
+Pixel Options:
+  --brightness [0.0 - 1.0], -b [0.0 - 1.0]
+                        Maximum brightness of any given pixel.
+  --channel CHANNEL     OPC channel to use.
+  --stride STRIDE       Number of pixels in a row for the attached matrix
+  --pixel-count PIXEL_COUNT
+                        Total number of pixels in the attached matrix
+
+weather options:
+  --wukey WUKEY         API key for the weather underground
+  --weather WEATHER     Fake weather conditions for testing.
+```
 
 ## Hardware
 
-* BeagleBone Green Wifi
+* BeagleBone running Debian linux
 * AdaFruit fadecandy
 * RGB or RGBW LED arrays or strips
 * A big power supply for your LEDs
 
-## BeagleBone Green Wifi
+Simply hook the fadecandy up to the BeagleBone and the pixels up to the fadecandy
+and then install this software as a service on the BeagleBone (see below).
 
-Setup instructions for the [BeagleBone Green Wifi](https://beagleboard.org/green-wireless/)
-running Debian Jessie.
+## BeagleBone
 
-> We assume you have installed Debian, have a working internet connection,
+Follow setup instructions for the [BeagleBone Green Wifi](https://beagleboard.org/green-wireless/)
+or [BeagleBone Black](http://beagleboard.org/black) running Debian Jessie.
+
+> From this point we assume you have installed Debian, have a working internet connection,
 > and have terminal access to your BeagleBone.
 
-    apt-get install python-imaging
-    pip install pyephem
+    pip install pyephem, blessings, scipy
+    mkdir /github
+    cd /github
     git clone https://github.com/scottdarch/InternetSkyLight.git
     git clone https://github.com/scanlime/fadecandy.git
     cd fadecandy/server
     make submodules
     make
-    ./fcserver &
-    cd ../../InternetSkyLight/glue
 
 > Note you may need to `pip install requests` but the latest versions of
 > Debian appear to have this pre-installed.
 
 ### Install Services
 
-    cp ~/fadecandy/server/fcserver /usr/bin
+This section will walk you through setting up the [fadecandy](https://github.com/scanlime/fadecandy) server and the internet
+skylight controller as linux services.
 
 #### /lib/systemd/system/fcserver.service
+
+Create this file and add the following to it:
 
     [Unit]
     Description=fadecandy server (runs on port 7890)
@@ -46,18 +95,23 @@ running Debian Jessie.
 
     [Service]
     Type=simple
-    ExecStart=/usr/bin/fcserver
+    ExecStart=/github/fadecandy/server/fcserver /github/InternetSkyLight/neopixel_512.json
 
     [Install]
     WantedBy=multi-user.target
 
- then
+then setup the systemd service to use this configuration with the following command:
 
     systemctl enable fcserver.service
 
-#### /lib/systemd/system/skylight-seattle.service
 
-Run a skylight using a Seattle Washington USA webcamera
+You'll probably need to create your own server configuration. See the [fadecandy github docs](https://github.com/scanlime/fadecandy/blob/master/doc/fc_server_config.md) for
+documentation.
+
+#### /lib/systemd/system/skylight.service
+
+Now create this file and a configuration like the one shown below (Obviously you'll want
+to use your location if you aren't in Seattle):
 
     [Unit]
     Description=Seattle WA skylight
@@ -65,21 +119,48 @@ Run a skylight using a Seattle Washington USA webcamera
 
     [Service]
     Type=simple
-    ExecStart=/root/InternetSkyLight/glue/skylight.py -c http://wwc.instacam.com/instacamimg/SALTY/SALTY_l.jpg --box 0 0 1028 350 --city Seattle
+    ExecStart=/github/InternetSkyLight/glue/skylight.py --city Seattle realtime
 
     [Install]
     WantedBy=multi-user.target
 
-then
+then setup the systemd service to use this configuration with the following command:
 
-    systemctl enable skylight-seattle.service
+    systemctl enable skylight.service
 
-## Some Example Cams
+### Weather
 
-**Seattle Skyline**
+The skylight controller has built-in support for the [weather underground's weather API](https://www.wunderground.com/weather/api). If you obtain an API key from their
+site the controller will use < 500 requests per day (per their free tier) to improve
+ephemeris calculations (using temperature and pressure to compensate for atmospheric effects)
+and to change the colour of the light based on weather conditions (see project brief above).
+Once you have a key all you have to do is ensure your BeagleBone has internet access
+and add `--wukey {your key here}` as an argument to skylight.py
 
-    skylight.py -c http://wwc.instacam.com/instacamimg/SALTY/SALTY_l.jpg --box 0 0 1028 350 --city Seattle
+### Debug
 
-**Mount Arunachala, Tiruvannamalai, India**
+There are numerous debug arguments available for the skylight.py script including
+a hypertime clock which can run the simulated days at any arbitrary clock speed.
+For active development I found it useful to connect to the [open pixel controller](http://openpixelcontrol.org/) server directly from my desktop. If you
+are using the BeagleBone setup this document describes you can enable remote control
+of the fadecandy device using these steps:
 
-    skylight.py -c http://www.arunachala-live.com/live/video.jpg --box 0 0 800 200
+1. Stop any running skylight service: `systemctl stop skylight`
+2. Add a configuration for the fadecandy server that enables a remote port by setting null for the listen interface. For example:
+```
+{
+       "listen": [null, 7890],
+
+       ...
+```
+(See the [fadecandy github docs](https://github.com/scanlime/fadecandy/blob/master/doc/fc_server_config.md) for
+documentation.)
+
+3. use the `--address` argument when invoking skylight.py to connect from your development machine.
+
+
+### Hacking
+
+The skylight controller uses the excellent [pyephem](https://github.com/brandon-rhodes/pyephem)
+library to estimate daylight levels. There are myriad opportunities to hack more
+of this library into the skylight project. For example, the WeatherSky object has an internal _render_night method that could be implemented to use pyephem to simulate moonlight.

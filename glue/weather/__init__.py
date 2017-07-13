@@ -156,6 +156,7 @@ class WeatherUnderground(object):
     
     @property
     def is_emergency(self):
+        # TODO: use weather alerts from the API instead of classifying conditions.
         conditions = self.get_current_conditions()
         if conditions is None:
             return True

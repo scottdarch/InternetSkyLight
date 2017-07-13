@@ -21,10 +21,8 @@
 #  | || | | | ||  __/ |  | | | |  __/ |_   ___) |   <| |_| | | | (_| | | | | |_ 
 # |___|_| |_|\__\___|_|  |_| |_|\___|\__| |____/|_|\_\\__, |_|_|\__, |_| |_|\__|
 #                                                     |___/     |___/
-from matplotlib import ticker
 from scipy.misc import comb  # @UnresolvedImport
 
-import matplotlib.pyplot as plt
 import numpy as np
 
 
@@ -52,17 +50,10 @@ def bezier_curve(control_points, nTimes):
 
     return xvals, yvals
 
-class MerkinFormatter(ticker.Formatter):
-    
-    def __call__(self, x, pos=0):  # @UnusedVariable
-        mhr = x % 12
-        if mhr < 1:
-            return "12"
-        else:
-            return "{:.0f}".format(mhr)
-
 def make_curve(morning_twilight, dawn, dusk, dark):
     noon = dawn + ((dusk - dawn) / 2.0)
+    # TODO: this shouldn't be buried in this method. Break out into
+    # some sort of configuration.
     control_points = [
         [ morning_twilight, 0.01], 
         [ dawn            , 1.80], 
@@ -75,6 +66,8 @@ def make_curve(morning_twilight, dawn, dusk, dark):
                         round((dark - morning_twilight) * 3600))
 
 def plot_curve(xy, dawn=None, dusk=None):
+    
+    import matplotlib.pyplot as plt
     
     with plt.xkcd():
         t = xy[0]
