@@ -21,16 +21,29 @@
 #  | || | | | ||  __/ |  | | | |  __/ |_   ___) |   <| |_| | | | (_| | | | | |_ 
 # |___|_| |_|\__\___|_|  |_| |_|\___|\__| |____/|_|\_\\__, |_|_|\__, |_| |_|\__|
 #                                                     |___/     |___/
-from scipy.misc import comb  # @UnresolvedImport
-
 import numpy as np
 
+pascals_triangle = [
+         [1],
+        [1,1],
+       [1,2,1],
+      [1,3,3,1],
+     [1,4,6,4,1],
+]
 
+def binomial(n,k):
+    '''
+    see https://pomax.github.io/bezierinfo/
+    '''
+    if n >= len(pascals_triangle):
+        raise ValueError('pascals_triangle look-up-table is only populated to order {}'.format(len(pascals_triangle-1)))
+    return pascals_triangle[n][k]
+  
 def bezier(k, n, t):
     '''
     see https://pomax.github.io/bezierinfo/
     '''
-    return comb(n,k) * (1-t)**(n-k) * t**(k)
+    return binomial(n,k) * (1-t)**(n-k) * t**(k)
   
 def bezier_curve(control_points, nTimes):
     '''
@@ -61,7 +74,6 @@ def make_curve(morning_twilight, dawn, dusk, dark):
         [ dusk            , 1.80], 
         [ dark            , 0.01]
         ]
-                       
     return bezier_curve(control_points,
                         round((dark - morning_twilight) * 3600))
 
@@ -75,15 +87,17 @@ def plot_curve(xy, dawn=None, dusk=None):
         
         if dawn is not None:
             plt.plot([dawn, dawn], [1.0, 0], linestyle="dashed", color="grey")
+            plt.annotate(
+                'YOUTUBE ->',
+                xy=(dawn + .01, 0.5))
         if dusk is not None:
             plt.plot([dusk, dusk], [1.0, 0], linestyle="dashed", color="grey")
+            plt.annotate(
+                'TV ->',
+                xy=(dusk + .01, 0.5))
         
         plt.plot(t, s, color="blue")
         
-        ni = int(len(t) / 2)
-        plt.annotate(
-        'FREE SANDWICHES',
-        xy=(t[ni], s[ni]), arrowprops=dict(arrowstyle='->'), xytext=(t[ni], s[ni] - .5))
         
         plt.xlabel('time (day)')
         plt.ylabel('intensity')

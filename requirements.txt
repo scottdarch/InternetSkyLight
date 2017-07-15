@@ -1,5 +1,4 @@
 numpy
 pyephem
 blessings
-scipy
 requests

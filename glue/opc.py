@@ -37,7 +37,15 @@ import socket
 
 class Client(object):
 
-    def __init__(self, server_ip_port, long_connection=True, verbose=False):
+    @classmethod
+    def on_visit_argparse(cls, parser, subparsers):  # @UnusedVariable
+        opc_args = parser.add_argument_group('OPC options')
+        opc_args.add_argument('--address', default="127.0.0.1", help="IP address to connect to.")
+        opc_args.add_argument('-p', '--port', help="TCP port to connect to OPC server on.", default=7890, type=int)
+        opc_args.add_argument('--opc-debug', action='store_true', help="Emit verbose logs from the OPC client.")
+   
+    
+    def __init__(self, args, long_connection=True):
         """Create an OPC client object which sends pixels to an OPC server.
 
         server_ip_port should be an ip:port or hostname:port as a single string.
@@ -59,12 +67,12 @@ class Client(object):
         If verbose is True, the client will print debugging info to the console.
 
         """
-        self.verbose = verbose
+        self.verbose = args.opc_debug
 
         self._long_connection = long_connection
 
-        self._ip, self._port = server_ip_port.split(':')
-        self._port = int(self._port)
+        self._ip = args.address
+        self._port = args.port
 
         self._socket = None  # will be None when we're not connected
 

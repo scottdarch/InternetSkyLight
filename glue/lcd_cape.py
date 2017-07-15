@@ -25,9 +25,9 @@ import time
 
 __app_name__ = "lcd_cape"
 
-# +----------------------------------------------------------------------------+
+# +---------------------------------------------------------------------+
 # | CONSTANTS
-# +----------------------------------------------------------------------------+
+# +---------------------------------------------------------------------+
 
 # Define MCP pins connected to the LCD.
 lcd_rs        = 1
@@ -45,65 +45,82 @@ lcd_rows    = 2
 lcd_backlight_on = 0.0
 lcd_backlight_off = 1.0
 
-iprefresh_time_seconds = 5
+refresh_time_seconds = 5
 
-# +----------------------------------------------------------------------------+
+# +---------------------------------------------------------------------+
+class LCDCape(object):
+    
+    @classmethod
+    def on_visit_argparse(cls, parser, subparsers=None):  # @UnusedVariable
+        parser.add_argument("--interface", default="eth0", help="The interface to report the address for.")
+
+    def __init__(self, args):
+        self._last_refresh = time.time()
+        self._interface = args.interface
+        # Initialize MCP23017 device using its default 0x20 I2C address.
+        gpio = MCP.MCP23008(busnum=2)
+    
+        # Initialize the LCD using the pins
+        self._lcd = LCD.Adafruit_CharLCD(
+                                lcd_rs, 
+                                lcd_en, 
+                                lcd_d4, 
+                                lcd_d5, 
+                                lcd_d6, 
+                                lcd_d7,
+                                lcd_columns, 
+                                lcd_rows, 
+                                lcd_backlight,
+                                gpio=gpio, 
+                                initial_backlight=lcd_backlight_on)
+    
+    def __call__(self):
+        now = time.time()
+        if now - self._last_refresh < refresh_time_seconds:
+            return
+        self._last_refresh = now
+        if re.match("^eth", self._interface) is not None:
+            line0 = self._line0_ethernet
+            line1 = self._line1_ethernet
+        else:
+            line0 = self._line0_wlan
+            line1 = self._line1_wlan
+            
+        self._lcd.clear()
+        message = "{}\n{}".format(line0(self._interface), line1(self._interface))
+        self._lcd.message(message)
+            
+    def line0_ethernet(self, interface):
+        return interface
+    
+    def line1_ethernet(self, interface):
+        return os.popen("ip addr show " + interface + " | awk '$1 == \"inet\" {gsub(/\/.*$/, \"\", $2); print $2}'").read()
+    
+    def line0_wlan(self, interface):
+        return os.popen("iwconfig " + interface + " | awk -F '\"' '{print $2;exit}'").read()
+    
+    def line1_wlan(self, interface):  # @UnusedVariable
+        return os.popen("ip route get 1 | awk '{print $NF;exit}'").read()
+        
+    
+# +---------------------------------------------------------------------+
 # | MAIN
-# +----------------------------------------------------------------------------+
-def line0_ethernet(interface):
-    return interface
-    
-def line1_ethernet(interface):
-    return os.popen("ip addr show " + interface + " | awk '$1 == \"inet\" {gsub(/\/.*$/, \"\", $2); print $2}'").read()
+# +---------------------------------------------------------------------+
 
-def line0_wlan(interface):
-    return os.popen("iwconfig " + interface + " | awk -F '\"' '{print $2;exit}'").read()
-
-def line1_wlan(interface):  # @UnusedVariable
-    return os.popen("ip route get 1 | awk '{print $NF;exit}'").read()
-    
 def main():
     parser = argparse.ArgumentParser(
             prog=__app_name__, 
             description="Runs a 16 character display attached to the BeagleBone to display the current IP address.")
     
-    parser.add_argument("--interface", default="eth0", help="The interface to report the address for.")
+    LCDCape.on_visit_argparse(parser)
     
     args = parser.parse_args()
      
-    # Initialize MCP23017 device using its default 0x20 I2C address.
-    gpio = MCP.MCP23008(busnum=2)
+    cape = LCDCape(args)
     
-    # Initialize the LCD using the pins
-    lcd = LCD.Adafruit_CharLCD(
-                            lcd_rs, 
-                            lcd_en, 
-                            lcd_d4, 
-                            lcd_d5, 
-                            lcd_d6, 
-                            lcd_d7,
-                            lcd_columns, 
-                            lcd_rows, 
-                            lcd_backlight,
-                            gpio=gpio, 
-                            initial_backlight=lcd_backlight_on)
-    
-    interface = args.interface
-    
-    if re.match("^eth", interface) is not None:
-        line0 = line0_ethernet
-        line1 = line1_ethernet
-    else:
-        line0 = line0_wlan
-        line1 = line1_wlan
-        
-    while True:
-        lcd.clear()
-        message = "{}\n{}".format(line0(interface), line1(interface))
-        lcd.message(message)
-        print message
-    
-        time.sleep(iprefresh_time_seconds)
+    while(True):
+        cape()
+        time.sleep(refresh_time_seconds / 4)
 
 if __name__ == "__main__":
     main()

@@ -20,11 +20,6 @@
 #  | || | | | ||  __/ |  | | | |  __/ |_   ___) |   <| |_| | | | (_| | | | | |_ 
 # |___|_| |_|\__\___|_|  |_| |_|\___|\__| |____/|_|\_\\__, |_|_|\__, |_| |_|\__|
 #                                                     |___/     |___/
-# TODO:
-# 1. Create a weather conditions -> colour map and implement _weather_correct_sky_pixel
-# 2. setup.py
-# 3. fake weather
-# 4. Klaxon mode
 #
 import argparse
 import time
@@ -244,7 +239,7 @@ class WeatherSky(object):
 # +---------------------------------------------------------------------------+
 # | MAIN
 # +---------------------------------------------------------------------------+
-_opc_fps = 60
+_opc_fps = 30
 
 def main():
     parser = argparse.ArgumentParser(
@@ -256,30 +251,37 @@ def main():
     eph_args = parser.add_argument_group('Ephemeris options')
     eph_args.add_argument('--city', required=True, help="A city used to lookup ephemeris values and to retrieve current weather conditions.")
     
-    opc_args = parser.add_argument_group('OPC options')
-    opc_args.add_argument('--address', default="127.0.0.1", help="IP address to connect to.")
-    opc_args.add_argument('-p', '--port', help="TCP port to connect to OPC server on.", default=7890, type=int)
-    
     debug_args = parser.add_argument_group('debug options')
     debug_args.add_argument('--verbose','-v', action='store_true', help="Spew debug stuff.")
     debug_args.add_argument('--show-daylight-chart', '-D', action='store_true', help="Open a window showing a plot of the daylight curve in-use.")
+    debug_args.add_argument('--opc-dont-connect', '-X', action='store_true', help="Skip trying to connect to an OPC server. Allows testing other parts of the skylight without actually running the LEDs.")
     
     RectangularPixelMatrix.on_visit_argparse(parser, subparsers)
     HyperClock.on_visit_argparse(parser, subparsers)
     WallClock.on_visit_argparse(parser, subparsers)
+    opc.Client.on_visit_argparse(parser, subparsers)
     
+    use_cape = True
+    try:
+        from lcd_cape import LCDCape
+        LCDCape.on_visit_argparse(parser, subparsers)
+    except IOError:
+        cape = None
+        use_cape = False
+        
     WeatherUnderground.on_visit_argparse(parser, subparsers)
     
     terminal = Terminal()
     args = parser.parse_args()
-    opc_client = opc.Client("{}:{}".format(args.address, args.port))
+    opc_client = opc.Client(args)
     
-    dots = ''
-    while(not opc_client.can_connect()):
-        with terminal.location(0, terminal.height - 2):
-            print 'Waiting for OPC server {}{:8}'.format(opc_client._port, dots)
-        dots = dots + '.' if len(dots) < 8 else '.'
-        time.sleep(1)
+    if not args.opc_dont_connect:
+        dots = ''
+        while(not opc_client.can_connect()):
+            with terminal.location(0, terminal.height - 2):
+                print 'Waiting for OPC server {}{:8}'.format(opc_client._port, dots)
+            dots = dots + '.' if len(dots) < 8 else '.'
+            time.sleep(1)
     
     try:
         print 'connected to OPC server on {}'.format(opc_client._port)
@@ -293,6 +295,9 @@ def main():
         except ValueError:
             print "Unable to obtain weather information. Check commandline arguments."
             weather = None
+        
+        if use_cape:
+            cape = LCDCape(args)
             
         sky = WeatherSky(args, 
                          terminal,
@@ -302,6 +307,8 @@ def main():
             while(1):
                 start = time.time()
                 sky(panel0)
+                if use_cape:
+                    cape()
                 delay_for = (1.0 / float(_opc_fps)) - (time.time() - start)
                 time.sleep(delay_for if delay_for > 0 else 1)
         except KeyboardInterrupt:

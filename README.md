@@ -6,11 +6,11 @@ This package provides software to control a fadecandy or other [open pixel contr
 over time and indicate weather conditions using light colour.
 
 ```
-usage: skylight [-h] --city CITY [--address ADDRESS] [-p PORT] [--verbose]
-                [--show-daylight-chart] [--brightness [0.0 - 1.0]]
+usage: skylight [-h] --city CITY [--verbose] [--show-daylight-chart]
+                [--opc-dont-connect] [--brightness [0.0 - 1.0]]
                 [--channel CHANNEL] [--stride STRIDE]
-                [--pixel-count PIXEL_COUNT] [--wukey WUKEY]
-                [--weather WEATHER]
+                [--pixel-count PIXEL_COUNT] [--address ADDRESS] [-p PORT]
+                [--opc-debug] [--wukey WUKEY] [--weather WEATHER]
                 {hypertime,realtime} ...
 
 Open Pixel Controller client providing contextual lighting effects.
@@ -27,15 +27,15 @@ Ephemeris options:
   --city CITY           A city used to lookup ephemeris values and to retrieve
                         current weather conditions.
 
-OPC options:
-  --address ADDRESS     IP address to connect to.
-  -p PORT, --port PORT  TCP port to connect to OPC server on.
-
 debug options:
   --verbose, -v         Spew debug stuff.
   --show-daylight-chart, -D
                         Open a window showing a plot of the daylight curve in-
                         use.
+  --opc-dont-connect, -X
+                        Skip trying to connect to an OPC server. Allows
+                        testing other parts of the skylight without actually
+                        running the LEDs.
 
 Pixel Options:
   --brightness [0.0 - 1.0], -b [0.0 - 1.0]
@@ -45,9 +45,15 @@ Pixel Options:
   --pixel-count PIXEL_COUNT
                         Total number of pixels in the attached matrix
 
+OPC options:
+  --address ADDRESS     IP address to connect to.
+  -p PORT, --port PORT  TCP port to connect to OPC server on.
+  --opc-debug           Emit verbose logs from the OPC client.
+
 weather options:
   --wukey WUKEY         API key for the weather underground
   --weather WEATHER     Fake weather conditions for testing.
+
 ```
 
 ## Hardware
@@ -102,7 +108,7 @@ Create this file and add the following to it:
 
 then setup the systemd service to use this configuration with the following command:
 
-    systemctl enable fcserver.service
+    sudo systemctl enable fcserver.service
 
 
 You'll probably need to create your own server configuration. See the [fadecandy github docs](https://github.com/scanlime/fadecandy/blob/master/doc/fc_server_config.md) for
@@ -126,7 +132,7 @@ to use your location if you aren't in Seattle):
 
 then setup the systemd service to use this configuration with the following command:
 
-    systemctl enable skylight.service
+    sudo systemctl enable skylight.service
 
 ### Weather
 
@@ -141,7 +147,7 @@ and add `--wukey {your key here}` as an argument to skylight.py
 
 There are numerous debug arguments available for the skylight.py script including
 a hypertime clock which can run the simulated days at any arbitrary clock speed.
-For active development I found it useful to connect to the [open pixel controller](http://openpixelcontrol.org/) server directly from my desktop. If you
+For active development I found it useful to connect to the [open pixel controller](http://openpixelcontrol.org/) server directly from my laptop. If you
 are using the BeagleBone setup this document describes you can enable remote control
 of the fadecandy device using these steps:
 
@@ -164,3 +170,6 @@ documentation.)
 The skylight controller uses the excellent [pyephem](https://github.com/brandon-rhodes/pyephem)
 library to estimate daylight levels. There are myriad opportunities to hack more
 of this library into the skylight project. For example, the WeatherSky object has an internal _render_night method that could be implemented to use pyephem to simulate moonlight.
+
+Also note that the OPC client allows for individual addressing of pixels. The current version
+of skylight.py doesn't take advantage of this at all running all pixels at the same value. You could create subtle shifts in the lighting to simulate snow fall or clouds drifting past or on a clear night show twinkling stars in the sky.
