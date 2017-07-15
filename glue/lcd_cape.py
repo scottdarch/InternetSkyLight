@@ -90,16 +90,16 @@ class LCDCape(object):
         message = "{}\n{}".format(line0(self._interface), line1(self._interface))
         self._lcd.message(message)
             
-    def line0_ethernet(self, interface):
+    def _line0_ethernet(self, interface):
         return interface
     
-    def line1_ethernet(self, interface):
+    def _line1_ethernet(self, interface):
         return os.popen("ip addr show " + interface + " | awk '$1 == \"inet\" {gsub(/\/.*$/, \"\", $2); print $2}'").read()
     
-    def line0_wlan(self, interface):
+    def _line0_wlan(self, interface):
         return os.popen("iwconfig " + interface + " | awk -F '\"' '{print $2;exit}'").read()
     
-    def line1_wlan(self, interface):  # @UnusedVariable
+    def _line1_wlan(self, interface):  # @UnusedVariable
         return os.popen("ip route get 1 | awk '{print $NF;exit}'").read()
         
     

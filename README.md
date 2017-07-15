@@ -2,6 +2,10 @@
 
 A skylight you can install in your internets.
 
+![512 NeoPixel Skylight](demo.gif)
+
+(See [32bits.io](https://32bits.io/#/internet-skylight/) for a high-level overview of this project.)
+
 This package provides software to control a fadecandy or other [open pixel controller](http://openpixelcontrol.org/) server to simulate daylight intensity
 over time and indicate weather conditions using light colour.
 
@@ -86,6 +90,27 @@ or [BeagleBone Black](http://beagleboard.org/black) running Debian Jessie.
 > Note you may need to `pip install requests` but the latest versions of
 > Debian appear to have this pre-installed.
 
+### Time
+
+Since the skylight is all about using time to simulate daylight you'll have to
+set the BeagleBone's system clock accurately. Start by installing NTP:
+
+```
+sudo apt-get update
+sudo apt-get -y install libopts25 ntpdate
+```
+From this point you can do:
+
+```
+sudo ntpdate -b -u pool.ntp.org
+```
+
+To setup ntp services see [Derek Molloy's blog](http://derekmolloy.ie/automatically-setting-the-beaglebone-black-time-using-ntp/) for an excellent tutorial.
+
+> If you want to run the skylight offline you'll need to add a hardware clock to your
+BeagleBone. See [this AdaFruit article](https://learn.adafruit.com/adding-a-real-time-clock-to-beaglebone-black/set-rtc-time)
+for a tutorial.
+
 ### Install Services
 
 This section will walk you through setting up the [fadecandy](https://github.com/scanlime/fadecandy) server and the internet
@@ -142,6 +167,16 @@ ephemeris calculations (using temperature and pressure to compensate for atmosph
 and to change the colour of the light based on weather conditions (see project brief above).
 Once you have a key all you have to do is ensure your BeagleBone has internet access
 and add `--wukey {your key here}` as an argument to skylight.py
+
+### LCD Cape
+
+![512 NeoPixel Skylight](lcd_cape.jpg)
+
+The skylight program includes optional support for a 16x2 character LCD display
+(like [this one](https://www.adafruit.com/product/181)) when run through an
+[MCP23017 i2c port expander](https://www.adafruit.com/product/732). The skylight
+program will display the internet connected interface and IP address, the system
+time, and the current weather (if the weather service is enabled).
 
 ### Debug
 
