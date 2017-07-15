@@ -29,6 +29,7 @@ import ephem
 
 from clocks import HyperClock, WallClock
 from curve_plot import plot_curve, make_curve
+from lcd_cape import LCDCape
 from lights import RectangularPixelMatrix
 import opc
 from weather import WeatherUnderground
@@ -114,6 +115,7 @@ class WeatherSky(object):
         self._current_weather = None
         self._current_daylight = None
         self._pixel_color = (255,255,255)
+        self._last_clock_time = self._clock.now()
         
         self._update_period_millis =  (3600000 * 24) / weather_service.get_max_updates_per_day() \
             if weather_service is not None else 0
@@ -179,8 +181,10 @@ class WeatherSky(object):
             self._render_daylight(panel, intensities[intensity_index if intensity_index < len(intensities) else len(intensities) - 1])
         else:
             self._render_night(panel, progress)
-            
-        self._draw_debug(now, self._current_daylight.get_phase_for(now), progress)
+        
+        self._last_clock_time = now
+        
+        self._draw_debug()
 
     # +------------------------------------------------------------------------+
     # | LIGHTS
@@ -218,16 +222,33 @@ class WeatherSky(object):
     # +------------------------------------------------------------------------+
     # | DEBUG/UTILITY
     # +------------------------------------------------------------------------+
+    def get_sky_time(self, time_format):
+        return ephem.localtime(ephem.date(self._last_clock_time)).strftime(time_format)
     
-    def _draw_debug(self, now, phase, progress):
+    def get_sky_phase(self):
+        if None == self._current_daylight:
+            return "(none)"
+        else:
+            return self._current_daylight.get_phase_for(self._last_clock_time)
+    
+    def get_sky_progress(self):
+        if None == self._current_daylight:
+            return "(none)"
+        else:
+            return self._current_daylight.progress(self._last_clock_time)
+
+    def get_sky_weather(self):
+        return self._current_weather
+        
+    def _draw_debug(self):
         if self._verbose:
             with self._bterm.location(0, 0):
                 self._bterm.clear_eol()
-                rhs =  "[{phase}] {progress:.0%}".format(phase=phase,
-                                      progress=progress)
+                rhs =  "[{phase}] {progress:.0%}".format(phase=self.get_sky_phase(),
+                                      progress=self.get_sky_progress())
                 center = "weather: {}".format(self._current_weather)
                 lhs = "{city}: {now:50}".format(city=self._city, 
-                                      now=ephem.localtime(ephem.date(now)).strftime(__standard_datetime_format_for_debug__))
+                                      now=self.get_sky_time(__standard_datetime_format_for_debug__))
                 spacing = (self._bterm.width - (len(rhs) + len(lhs) + len(center)))
                 lspacing = int(round(spacing / 2, 0))
                 rspacing = spacing - lspacing
@@ -239,12 +260,13 @@ class WeatherSky(object):
 # +---------------------------------------------------------------------------+
 # | MAIN
 # +---------------------------------------------------------------------------+
-_opc_fps = 30
 
 def main():
     parser = argparse.ArgumentParser(
             prog=__app_name__, 
             description="Open Pixel Controller client providing contextual lighting effects.")
+    
+    parser.add_argument("--frame-rate", default=1, type=int, help="Frames-per-second to run the sky simulation at.")
     
     subparsers = parser.add_subparsers(dest="command", help="Clock Modes")
     
@@ -260,14 +282,7 @@ def main():
     HyperClock.on_visit_argparse(parser, subparsers)
     WallClock.on_visit_argparse(parser, subparsers)
     opc.Client.on_visit_argparse(parser, subparsers)
-    
-    use_cape = True
-    try:
-        from lcd_cape import LCDCape
-        LCDCape.on_visit_argparse(parser, subparsers)
-    except IOError:
-        cape = None
-        use_cape = False
+    LCDCape.on_visit_argparse(parser, subparsers)
         
     WeatherUnderground.on_visit_argparse(parser, subparsers)
     
@@ -296,20 +311,22 @@ def main():
             print "Unable to obtain weather information. Check commandline arguments."
             weather = None
         
-        if use_cape:
-            cape = LCDCape(args)
-            
         sky = WeatherSky(args, 
                          terminal,
                          clock, 
                          weather)
+        
+        cape = LCDCape(args, sky)
+        
+        fps = args.frame_rate
+        if args.verbose:
+            print "Running the simulation at {} frame(s) per second".format(fps)
         try:
             while(1):
                 start = time.time()
                 sky(panel0)
-                if use_cape:
-                    cape()
-                delay_for = (1.0 / float(_opc_fps)) - (time.time() - start)
+                cape()
+                delay_for = (1.0 / float(fps)) - (time.time() - start)
                 time.sleep(delay_for if delay_for > 0 else 1)
         except KeyboardInterrupt:
             panel0.black()

@@ -93,21 +93,15 @@ or [BeagleBone Black](http://beagleboard.org/black) running Debian Jessie.
 ### Time
 
 Since the skylight is all about using time to simulate daylight you'll have to
-set the BeagleBone's system clock accurately. Start by installing NTP:
+set the BeagleBone's system clock accurately. The best way is to install NTP services:
 
 ```
 sudo apt-get update
-sudo apt-get -y install libopts25 ntpdate
+sudo apt-get -y install libopts25 ntpdate ntp
 ```
-From this point you can do:
+Make sure to setup `/etc/localtime` as a symlink to your local timezone under `/usr/share/zoneinfo/[region]`
 
-```
-sudo ntpdate -b -u pool.ntp.org
-```
-
-To setup ntp services see [Derek Molloy's blog](http://derekmolloy.ie/automatically-setting-the-beaglebone-black-time-using-ntp/) for an excellent tutorial.
-
-> If you want to run the skylight offline you'll need to add a hardware clock to your
+If you want to run the skylight offline you'll need to add a hardware clock to your
 BeagleBone. See [this AdaFruit article](https://learn.adafruit.com/adding-a-real-time-clock-to-beaglebone-black/set-rtc-time)
 for a tutorial.
 
