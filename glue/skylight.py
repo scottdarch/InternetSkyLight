@@ -24,7 +24,6 @@
 import argparse
 import time
 
-from blessings import Terminal
 import ephem
 
 from clocks import HyperClock, WallClock
@@ -101,7 +100,7 @@ class WeatherSky(object):
     weather conditions reported by an external weather service.
     '''
     
-    def __init__(self, args, terminal, wallclock, weather_service):
+    def __init__(self, args, wallclock, weather_service):
         self._twilight = "-7"
         self._clock = wallclock
         self._city = args.city
@@ -110,7 +109,6 @@ class WeatherSky(object):
         self._sun = ephem.Sun()  # @UndefinedVariable
         self._verbose = args.verbose
         self._show_daylight_chart = args.show_daylight_chart
-        self._bterm = terminal
         self._weather_timer = None
         self._current_daylight = None
         self._pixel_color = (255,255,255)
@@ -243,17 +241,12 @@ class WeatherSky(object):
         
     def _draw_debug(self):
         if self._verbose:
-            with self._bterm.location(0, 0):
-                self._bterm.clear_eol()
-                rhs =  "[{phase}] {progress:.0%}".format(phase=self.get_sky_phase(),
-                                      progress=self.get_sky_progress())
-                center = "weather: {}".format(self.get_sky_weather())
-                lhs = "{city}: {now:50}".format(city=self._city, 
-                                      now=self.get_sky_time(__standard_datetime_format_for_debug__))
-                spacing = (self._bterm.width - (len(rhs) + len(lhs) + len(center)))
-                lspacing = int(round(spacing / 2, 0))
-                rspacing = spacing - lspacing
-                print self._bterm.white_on_blue("{}{}{}{}{}".format(lhs, ' ' * lspacing , center, ' ' * rspacing, rhs))
+            rhs =  "[{phase}] {progress:.0%}".format(phase=self.get_sky_phase(),
+                                  progress=self.get_sky_progress())
+            center = "weather: {}".format(self.get_sky_weather())
+            lhs = "{city}: {now:50}".format(city=self._city, 
+                                  now=self.get_sky_time(__standard_datetime_format_for_debug__))
+            print "{} | {} | {}".format(lhs, center, rhs)
         if self._show_daylight_chart:
             plot_curve(self._current_daylight.day_curve, self._current_daylight.dawn, self._current_daylight.dusk)
             self._show_daylight_chart = False
@@ -287,15 +280,13 @@ def main():
         
     WeatherUnderground.on_visit_argparse(parser, subparsers)
     
-    terminal = Terminal()
     args = parser.parse_args()
     opc_client = opc.Client(args)
     
     if not args.opc_dont_connect:
         dots = ''
         while(not opc_client.can_connect()):
-            with terminal.location(0, terminal.height - 2):
-                print 'Waiting for OPC server {}{:8}'.format(opc_client._port, dots)
+            print 'Waiting for OPC server {}{:8}'.format(opc_client._port, dots)
             dots = dots + '.' if len(dots) < 8 else '.'
             time.sleep(1)
     
@@ -313,7 +304,6 @@ def main():
             weather = None
         
         sky = WeatherSky(args, 
-                         terminal,
                          clock, 
                          weather)
         

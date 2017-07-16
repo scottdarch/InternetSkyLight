@@ -83,7 +83,7 @@ or [BeagleBone Black](http://beagleboard.org/black) running Debian Jessie.
 > From this point we assume you have installed Debian, have a working internet connection,
 > and have terminal access to your BeagleBone.
 
-    pip install pyephem, blessings, scipy
+    pip install pyephem, numpy
     mkdir /github
     cd /github
     git clone https://github.com/scottdarch/InternetSkyLight.git
@@ -157,6 +157,12 @@ to use your location if you aren't in Seattle):
 then setup the systemd service to use this configuration with the following command:
 
     sudo systemctl enable skylight.service
+
+You can view any logs using journalctl
+
+```
+journalctl -u skylight
+```
 
 ### Weather
 
