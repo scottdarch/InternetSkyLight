@@ -10,7 +10,7 @@
        "devices": [
            {
                "type": "fadecandy",
-               "dither": true,
+               "dither": false,
                "map": [[ 0, 0, 0, 512 ]]
            }
        ]

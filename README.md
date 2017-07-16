@@ -10,11 +10,12 @@ This package provides software to control a fadecandy or other [open pixel contr
 over time and indicate weather conditions using light colour.
 
 ```
-usage: skylight [-h] --city CITY [--verbose] [--show-daylight-chart]
-                [--opc-dont-connect] [--brightness [0.0 - 1.0]]
-                [--channel CHANNEL] [--stride STRIDE]
-                [--pixel-count PIXEL_COUNT] [--address ADDRESS] [-p PORT]
-                [--opc-debug] [--wukey WUKEY] [--weather WEATHER]
+usage: skylight [-h] [--frame-rate FRAME_RATE] --city CITY [--verbose]
+                [--show-daylight-chart] [--opc-dont-connect]
+                [--brightness [0.0 - 1.0]] [--channel CHANNEL]
+                [--stride STRIDE] [--pixel-count PIXEL_COUNT]
+                [--address ADDRESS] [-p PORT] [--opc-debug]
+                [--interface INTERFACE] [--wukey WUKEY] [--weather WEATHER]
                 {hypertime,realtime} ...
 
 Open Pixel Controller client providing contextual lighting effects.
@@ -26,6 +27,10 @@ positional arguments:
 
 optional arguments:
   -h, --help            show this help message and exit
+  --frame-rate FRAME_RATE
+                        Frames-per-second to run the sky simulation at.
+  --interface INTERFACE
+                        The interface to report the address for.
 
 Ephemeris options:
   --city CITY           A city used to lookup ephemeris values and to retrieve
