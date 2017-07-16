@@ -112,7 +112,6 @@ class WeatherSky(object):
         self._show_daylight_chart = args.show_daylight_chart
         self._bterm = terminal
         self._weather_timer = None
-        self._current_weather = None
         self._current_daylight = None
         self._pixel_color = (255,255,255)
         self._last_clock_time = self._clock.now()
@@ -153,7 +152,6 @@ class WeatherSky(object):
             if self._weather.has_new_weather():
                 self._observer.pressure = self._weather.get_pressure_mb(self._observer.pressure)
                 self._observer.temp = self._weather.get_temperature_c(self._observer.temp)
-                self._current_weather = self._weather.get_current_weather()
                 if self._weather.is_sunny:
                     self._pixel_color = (255,255,255)
                 elif self._weather.is_emergency:
@@ -238,7 +236,10 @@ class WeatherSky(object):
             return self._current_daylight.progress(self._last_clock_time)
 
     def get_sky_weather(self):
-        return self._current_weather
+        if self._weather is not None:
+            return self._weather.get_current_weather()
+        else:
+            return "(no data)"
         
     def _draw_debug(self):
         if self._verbose:
@@ -246,7 +247,7 @@ class WeatherSky(object):
                 self._bterm.clear_eol()
                 rhs =  "[{phase}] {progress:.0%}".format(phase=self.get_sky_phase(),
                                       progress=self.get_sky_progress())
-                center = "weather: {}".format(self._current_weather)
+                center = "weather: {}".format(self.get_sky_weather())
                 lhs = "{city}: {now:50}".format(city=self._city, 
                                       now=self.get_sky_time(__standard_datetime_format_for_debug__))
                 spacing = (self._bterm.width - (len(rhs) + len(lhs) + len(center)))
