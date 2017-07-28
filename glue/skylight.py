@@ -114,7 +114,7 @@ class WeatherSky(object):
         self._pixel_color = (255,255,255)
         self._last_clock_time = self._clock.now()
         
-        self._update_period_millis =  (3600000 * 24) / weather_service.get_max_updates_per_day() \
+        self._update_period_seconds =  (3600 * 24) / weather_service.get_max_updates_per_day() \
             if weather_service is not None else 0
             
         try:
@@ -139,13 +139,13 @@ class WeatherSky(object):
         if self._weather is not None:
             # We have to ensure we are always using wall-clock time for the
             # weather update since this API is metered.
-            actually_now = time.time()
-            if self._weather_timer is None or actually_now - self._weather_timer > self._update_period_millis:
+            actually_now_seconds = time.time()
+            if self._weather_timer is None or actually_now_seconds - self._weather_timer > self._update_period_seconds:
                 if self._verbose:
-                    print "About to request new weather (The next request will be in {:.2f} minutes)".format(self._update_period_millis / 60000.00)
+                    print "About to request new weather (The next request will be in {:.2f} minutes)".format(self._update_period_seconds / 60.00)
                 # once per period send a request for new weather conditions
                 self._weather.start_weather_update()
-                self._weather_timer = actually_now
+                self._weather_timer = actually_now_seconds
             
             if self._weather.has_new_weather():
                 self._observer.pressure = self._weather.get_pressure_mb(self._observer.pressure)

@@ -99,16 +99,19 @@ class WeatherUnderground(object):
     
     @staticmethod
     def _request_routine(self):
-        r = requests.get("http://api.wunderground.com/api/{}/conditions/q/CA/{}.json".format(self._key, self._city))
-        conditions = r.json()
+        if self._fake_weather is not None:
+            conditions = { 'current_observation': {'weather': self._fake_weather}}
+        else:
+            r = requests.get("http://api.wunderground.com/api/{}/conditions/q/CA/{}.json".format(self._key, self._city))
+            conditions = r.json()
         with self._request_lock:
+            if self._verbose:
+                print "New conditions received: {}".format(conditions)
             self._conditions = conditions
             self._new_data_flag = True
 
     def __init__(self, args):
         self._key = args.wukey
-        if self._key is None:
-            raise ValueError("wukey argument is required if not using fake conditions.")
         self._city = args.city
         self._conditions = None
         self._verbose = args.verbose
@@ -116,13 +119,18 @@ class WeatherUnderground(object):
         self._request_lock = threading.RLock()
         self._new_data_flag = False
         self._fake_weather = args.weather
+        if self._fake_weather is None:
+            if self._key is None:
+                raise ValueError("wukey argument is required if not using fake conditions.")
+        elif self._verbose:
+            print "Using fake weather conditions {}".format(self._fake_weather)
     
     def get_max_updates_per_day(self):
         return self.MAX_API_CALLS_PER_DAY
     
     def start_weather_update(self):
         with self._request_lock:
-            if self._request_thread is None or self._request_lock.is_alive():
+            if self._request_thread is None or not self._request_thread.is_alive():
                 self._request_thread = threading.Thread(group=None, target=self._request_routine, args=[self])
                 self._request_thread.start()
                 return True
@@ -130,13 +138,8 @@ class WeatherUnderground(object):
                 return False
 
     def has_new_weather(self):
-        has_new = False  # @UnusedVariable
         with self._request_lock:
-            has_new = self._new_data_flag
-            self._new_data_flag = False
-            #if self._verbose:
-            #    self.print_complete_weather()
-        return has_new
+            return self._new_data_flag
     
     @property
     def is_sunny(self):
@@ -165,8 +168,7 @@ class WeatherUnderground(object):
         
     def get_current_conditions(self):
         with self._request_lock:
-            if self._fake_weather is not None:
-                self._conditions['current_observation']['weather'] = self._fake_weather
+            self._new_data_flag = False
             return (self._conditions['current_observation'] if self._conditions is not None else None)
     
     def get_current_weather(self):
