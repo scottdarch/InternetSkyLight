@@ -19,4 +19,5 @@ RemoteSystemsTempFiles
 .project
 *.pyc
 .pydevproject
+.resin-sync.yml
 
