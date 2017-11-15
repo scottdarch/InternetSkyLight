@@ -82,10 +82,13 @@ class LCDCape(object):
                                     lcd_backlight,
                                     gpio=gpio, 
                                     initial_backlight=lcd_backlight_on)
-        except IOError:
+        except (IOError, ImportError):
             self._lcd = None
             
     def __call__(self):
+        if self._lcd is None:
+            return
+
         now = time.time()
         if now - self._last_refresh < self._page_delay_seconds:
             return
@@ -104,9 +107,8 @@ class LCDCape(object):
             print message
             print "----------------"
         
-        if self._lcd is not None:
-            self._lcd.clear()
-            self._lcd.message(message)
+        self._lcd.clear()
+        self._lcd.message(message)
     
     def _show_page0(self):
         if self._is_wlan:

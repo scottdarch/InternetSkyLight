@@ -176,12 +176,18 @@ class WeatherUnderground(object):
         return (conditions['weather'] if conditions is not None else None)
     
     def get_pressure_mb(self, default_value=1013.25):
-        conditions = self.get_current_conditions()
-        return (float(conditions['pressure_mb']) if conditions is not None else default_value)
-    
+        try:
+            conditions = self.get_current_conditions()
+            return (float(conditions['pressure_mb']) if conditions is not None else default_value)
+        except KeyError:
+            return default_value
+
     def get_temperature_c(self, default_value=0.0):
-        conditions = self.get_current_conditions()
-        return (float(conditions['temp_c']) if conditions is not None else default_value)
+        try:
+            conditions = self.get_current_conditions()
+            return (float(conditions['temp_c']) if conditions is not None else default_value)
+        except KeyError:
+            return default_value
     
     def print_complete_weather(self):
         print json.dumps(self.get_current_conditions(), indent=4, sort_keys=True)
